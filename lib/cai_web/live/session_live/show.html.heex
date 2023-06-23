@@ -1,0 +1,28 @@
+<.header>
+  Session <%= @session.id %>
+  <:subtitle>This is a session record from your database.</:subtitle>
+  <:actions>
+    <.link patch={~p"/sessions/#{@session}/show/edit"} phx-click={JS.push_focus()}>
+      <.button>Edit session</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.list>
+  <:item title="Character"><%= @session.character %></:item>
+  <:item title="Faction"><%= @session.faction_id %></:item>
+  <:item title="Name"><%= @session.name %></:item>
+</.list>
+
+<.back navigate={~p"/sessions"}>Back to sessions</.back>
+
+<.modal :if={@live_action == :edit} id="session-modal" show on_cancel={JS.patch(~p"/sessions/#{@session}")}>
+  <.live_component
+    module={CAIWeb.SessionLive.FormComponent}
+    id={@session.id}
+    title={@page_title}
+    action={@live_action}
+    session={@session}
+    patch={~p"/sessions/#{@session}"}
+  />
+</.modal>

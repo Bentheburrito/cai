@@ -20,6 +20,13 @@ defmodule CAIWeb.Router do
     get "/", PageController, :home
   end
 
+  live "/sessions", SessionLive.Index, :index
+  live "/sessions/new", SessionLive.Index, :new
+  live "/sessions/:id/edit", SessionLive.Index, :edit
+
+  live "/sessions/:id", SessionLive.Show, :show
+  live "/sessions/:id/show/edit", SessionLive.Show, :edit
+
   # Other scopes may use custom stacks.
   # scope "/api", CAIWeb do
   #   pipe_through :api

@@ -1,0 +1,43 @@
+<.header>
+  Listing Sessions
+  <:actions>
+    <.link patch={~p"/sessions/new"}>
+      <.button>New Session</.button>
+    </.link>
+  </:actions>
+</.header>
+
+<.table
+  id="sessions"
+  rows={@streams.sessions}
+  row_click={fn {_id, session} -> JS.navigate(~p"/sessions/#{session}") end}
+>
+  <:col :let={{_id, session}} label="Character"><%= session.character %></:col>
+  <:col :let={{_id, session}} label="Faction"><%= session.faction_id %></:col>
+  <:col :let={{_id, session}} label="Name"><%= session.name %></:col>
+  <:action :let={{_id, session}}>
+    <div class="sr-only">
+      <.link navigate={~p"/sessions/#{session}"}>Show</.link>
+    </div>
+    <.link patch={~p"/sessions/#{session}/edit"}>Edit</.link>
+  </:action>
+  <:action :let={{id, session}}>
+    <.link
+      phx-click={JS.push("delete", value: %{id: session.id}) |> hide("##{id}")}
+      data-confirm="Are you sure?"
+    >
+      Delete
+    </.link>
+  </:action>
+</.table>
+
+<.modal :if={@live_action in [:new, :edit]} id="session-modal" show on_cancel={JS.patch(~p"/sessions")}>
+  <.live_component
+    module={CAIWeb.SessionLive.FormComponent}
+    id={@session.id || :new}
+    title={@page_title}
+    action={@live_action}
+    session={@session}
+    patch={~p"/sessions"}
+  />
+</.modal>
