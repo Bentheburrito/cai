@@ -1,28 +1,25 @@
 <.header>
-  Session <%= @session.id %>
-  <:subtitle>This is a session record from your database.</:subtitle>
-  <:actions>
+  <img width="50" height="50" src={CAI.factions()[@character.faction_id].image} />
+  <%= if @character.outfit do %>
+    [<%= @character.outfit.alias %>]
+  <% end %>
+  <%= @character.name_first %>
+  <:subtitle><%= @character.character_id %></:subtitle>
+  <%!-- <:actions>
     <.link patch={~p"/sessions/#{@session}/show/edit"} phx-click={JS.push_focus()}>
       <.button>Edit session</.button>
     </.link>
-  </:actions>
+  </:actions> --%>
 </.header>
 
-<.list>
-  <:item title="Character"><%= @session.character %></:item>
-  <:item title="Faction"><%= @session.faction_id %></:item>
-  <:item title="Name"><%= @session.name %></:item>
-</.list>
+<div>
+<h3 class="m-2">Event Log</h3>
+  <div id="ess-events" phx-update="stream" class="border-solid border-4 m-1 p-2 rounded-2xl border-gray-400">
+    <div :for={{dom_id, event} <- @streams.events} id={dom_id}>
+      <%= dom_id %>
+      <span><%= event.timestamp %></span>
+    </div>
+  </div>
+</div>
 
 <.back navigate={~p"/sessions"}>Back to sessions</.back>
-
-<.modal :if={@live_action == :edit} id="session-modal" show on_cancel={JS.patch(~p"/sessions/#{@session}")}>
-  <.live_component
-    module={CAIWeb.SessionLive.FormComponent}
-    id={@session.id}
-    title={@page_title}
-    action={@live_action}
-    session={@session}
-    patch={~p"/sessions/#{@session}"}
-  />
-</.modal>

@@ -4,7 +4,6 @@ defmodule CAI.Characters do
   """
 
   import Ecto.Query, warn: false
-  import Ecto.Query.WindowAPI, only: [lead: 3, over: 2]
   import PS2.API.QueryBuilder, except: [field: 2]
 
   alias Ecto.Changeset
@@ -16,7 +15,9 @@ defmodule CAI.Characters do
 
   require Logger
 
-  @type character_reference :: name :: String.t() | character_id :: integer()
+  @type character_id :: integer()
+  @type character_name :: String.t()
+  @type character_reference :: character_name | character_id
 
   @cache_ttl_ms 12 * 60 * 60 * 1000
   @put_opts [ttl: @cache_ttl_ms]
