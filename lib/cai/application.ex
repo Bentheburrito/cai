@@ -15,9 +15,10 @@ defmodule CAI.Application do
       # Start the PubSub system
       {Phoenix.PubSub, name: CAI.PubSub},
       # Start the Endpoint (http/https)
-      CAIWeb.Endpoint
-      # Start a worker by calling: CAI.Worker.start_link(arg)
-      # {CAI.Worker, arg}
+      CAIWeb.Endpoint,
+      # Start our Cachex caches
+      Supervisor.child_spec({Cachex, name: :character_name_map}, id: :character_name_map),
+      Supervisor.child_spec({Cachex, name: :character_cache}, id: :character_cache)
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
