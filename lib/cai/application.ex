@@ -6,7 +6,19 @@ defmodule CAI.Application do
   @impl true
   def start(_type, _args) do
     subscriptions = [
-      events: ["all"],
+      events: [
+        PS2.gain_experience(),
+        PS2.death(),
+        PS2.vehicle_destroy(),
+        PS2.player_login(),
+        PS2.player_logout(),
+        PS2.player_facility_capture(),
+        PS2.player_facility_defend(),
+        PS2.battle_rank_up(),
+        PS2.metagame_event(),
+        PS2.continent_unlock(),
+        PS2.continent_lock()
+      ],
       worlds: ["all"],
       characters: ["all"]
     ]

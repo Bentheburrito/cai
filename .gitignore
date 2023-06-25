@@ -39,3 +39,6 @@ npm-debug.log
 .elixir_ls/
 .DS_Store
 .env
+
+# temp static data cache JSON files (weapons.json, xp.json, etc.)
+cache/

@@ -11,7 +11,7 @@ defmodule CAI.Characters.Outfit do
     field :outfit_id, :integer
     field :member_since_date, :utc_datetime
     field :name, :string
-    field :alias, :string
+    field :alias, :string, default: ""
     field :time_created_date, :utc_datetime
     field :leader_character_id, :integer
   end
@@ -33,7 +33,8 @@ defmodule CAI.Characters.Outfit do
 
     outfit
     |> cast(params, @fields)
-    |> validate_required(@fields)
+    # Aliases are apparently not required
+    |> validate_required(@fields |> List.delete(:alias))
   end
 
   defp format_census_date(date_string) when date_string in [nil, ""], do: nil

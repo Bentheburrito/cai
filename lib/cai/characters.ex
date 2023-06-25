@@ -55,6 +55,8 @@ defmodule CAI.Characters do
   TODO: return cached_at on cache hit, and remaining TTL?
   """
   @spec get_character(character_reference()) :: {:ok, Character.t()} | :not_found | :error
+  def get_character(0), do: :not_found
+
   def get_character(name) when is_binary(name) do
     name_lower = String.downcase(name)
 

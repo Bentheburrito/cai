@@ -19,8 +19,8 @@
     phx-update="stream"
     class="border-solid border-4 m-1 p-2 rounded-2xl border-gray-400"
   >
-    <div :for={{dom_id, event} <- @streams.events} id={dom_id}>
-      <.event_item event={event} character={@character} character_map={%{}} />
+    <div :for={{dom_id, {event, character, other}} <- @streams.events} id={dom_id}>
+      <.event_item event={event} character={character} other={other} />
     </div>
   </div>
 </div>
