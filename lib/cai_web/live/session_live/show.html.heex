@@ -1,4 +1,4 @@
-<.header>
+<.header :if={@character}>
   <img width="50" height="50" src={CAI.factions()[@character.faction_id].image} />
   <%= if @character.outfit do %>
     [<%= @character.outfit.alias %>]
@@ -12,12 +12,15 @@
   </:actions> --%>
 </.header>
 
-<div>
-<h3 class="m-2">Event Log</h3>
-  <div id="ess-events" phx-update="stream" class="border-solid border-4 m-1 p-2 rounded-2xl border-gray-400">
+<div :if={@streams}>
+  <h3 class="m-2">Event Log</h3>
+  <div
+    id="ess-events"
+    phx-update="stream"
+    class="border-solid border-4 m-1 p-2 rounded-2xl border-gray-400"
+  >
     <div :for={{dom_id, event} <- @streams.events} id={dom_id}>
-      <%= dom_id %>
-      <span><%= event.timestamp %></span>
+      <.event_item event={event} character={@character} character_map={%{}} />
     </div>
   </div>
 </div>

@@ -9,7 +9,9 @@ defmodule CAI do
 
   def sid, do: System.get_env("SERVICE_ID")
 
-  def revive_xp_ids, do: [7, 53]
+  @revive_xp_ids [7, 53]
+  def revive_xp_ids, do: @revive_xp_ids
+  defguard is_revive_xp(id) when id in @revive_xp_ids
 
   def factions,
     do: %{

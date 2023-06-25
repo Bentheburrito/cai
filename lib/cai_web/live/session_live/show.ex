@@ -1,6 +1,8 @@
 defmodule CAIWeb.SessionLive.Show do
   use CAIWeb, :live_view
 
+  import CAIWeb.ESSComponents
+
   alias CAI.Characters
   alias CAI.Characters.Character
   alias Phoenix.PubSub
@@ -31,7 +33,7 @@ defmodule CAIWeb.SessionLive.Show do
           :noreply,
           socket
           |> stream(:events, [], at: 0, limit: 2)
-          |> assign(:page_title, page_title(socket.assigns.live_action))
+          |> assign(:page_title, "#{character.name_first}'s Session")
           |> assign(:character, character)
         }
 
@@ -43,7 +45,7 @@ defmodule CAIWeb.SessionLive.Show do
          assign(
            socket,
            :page_title,
-           "An error occured while looking up that character. Please try."
+           "An error occured while looking up that character. Please try again."
          )}
     end
   end
@@ -54,9 +56,6 @@ defmodule CAIWeb.SessionLive.Show do
 
     {:noreply, stream_insert(socket, :events, event, at: 0)}
   end
-
-  defp page_title(:show), do: "Show Session"
-  defp page_title(:edit), do: "Edit Session"
 
   defp event_to_dom_id(event) do
     hash = :md5 |> :crypto.hash(inspect(event)) |> Base.encode16()

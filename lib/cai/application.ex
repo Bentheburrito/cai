@@ -1,12 +1,24 @@
 defmodule CAI.Application do
-  # See https://hexdocs.pm/elixir/Application.html
-  # for more information on OTP Applications
   @moduledoc false
 
   use Application
 
   @impl true
   def start(_type, _args) do
+    subscriptions = [
+      events: ["all"],
+      worlds: ["all"],
+      characters: ["all"]
+    ]
+
+    clients = [CAI.ESS.Client]
+
+    ess_opts = [
+      subscriptions: subscriptions,
+      clients: clients,
+      service_id: CAI.sid()
+    ]
+
     children = [
       # Start the Telemetry supervisor
       CAIWeb.Telemetry,
@@ -18,7 +30,10 @@ defmodule CAI.Application do
       CAIWeb.Endpoint,
       # Start our Cachex caches
       Supervisor.child_spec({Cachex, name: :character_name_map}, id: :character_name_map),
-      Supervisor.child_spec({Cachex, name: :character_cache}, id: :character_cache)
+      Supervisor.child_spec({Cachex, name: :character_cache}, id: :character_cache),
+      CAI.ESS.Client,
+      # Start the ESS Socket
+      {PS2.Socket, ess_opts}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html
