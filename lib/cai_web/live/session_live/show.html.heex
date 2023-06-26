@@ -1,5 +1,6 @@
 <.header :if={@character}>
-  <img width="50" height="50" src={CAI.factions()[@character.faction_id].image} />
+  <img class="h-20 w-20" src={CAI.factions()[@character.faction_id].image} />
+
   <%= if @character.outfit do %>
     [<%= @character.outfit.alias %>]
   <% end %>

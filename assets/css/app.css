@@ -3,3 +3,18 @@
 @import "tailwindcss/utilities";
 
 /* This file is for your main application CSS */
+
+@keyframes fade {
+  from {
+    background-color: purple;
+  }
+
+  75%, 100% {
+    background-color: transparent;
+    padding: 0%;
+  }
+}
+
+.animate-fade {
+  animation: fade 1s linear infinite;
+}
