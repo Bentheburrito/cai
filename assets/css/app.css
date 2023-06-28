@@ -16,5 +16,5 @@
 }
 
 .animate-fade {
-  animation: fade 1s linear infinite;
+  animation: fade 1s ease-in infinite;
 }

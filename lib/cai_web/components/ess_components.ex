@@ -48,14 +48,16 @@ defmodule CAIWeb.ESSComponents do
 
   def event_item(assigns) do
     ~H"""
-    <span phx-mounted={
-      Phoenix.LiveView.JS.transition(
-        "animate-fade rounded-l p-1",
-        time: 1000
-      )
-    }>
-      <%= build_event_log_item(assigns, @event, @character.character_id) %>
-    </span>
+    <%= unless (log = build_event_log_item(assigns, @event, @character.character_id)) == "" do %>
+      <span phx-mounted={
+        Phoenix.LiveView.JS.transition(
+          "animate-fade rounded-l p-1",
+          time: 1000
+        )
+      }>
+        <%= log %>
+      </span>
+    <% end %>
     """
   end
 
