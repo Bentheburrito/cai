@@ -53,6 +53,8 @@ defmodule CAI.ESS.Client do
 
         PubSub.broadcast(CAI.PubSub, "ess:#{event_name}", {:event, event})
 
+        CAI.Repo.insert!(event)
+
       {:error, reason} ->
         Logger.error("Couldn't handle event: #{reason}")
     end

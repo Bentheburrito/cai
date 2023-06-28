@@ -12,8 +12,21 @@ defmodule CAI.Characters.Session do
   """
   use Ecto.Schema
   import Ecto.Changeset
+  import Ecto.Query
 
-  alias CAI.ESS
+  alias CAI.{ESS, Repo}
+  alias CAI.Characters.Session
+
+  alias CAI.ESS.{
+    Death,
+    GainExperience,
+    BattleRankUp,
+    PlayerFacilityCapture,
+    PlayerFacilityDefend,
+    PlayerLogin,
+    PlayerLogout,
+    VehicleDestroy
+  }
 
   def session_timeout_mins, do: @session_timeout_mins
   def session_timeout_ms, do: @session_timeout_mins * 60 * 1000
@@ -40,10 +53,92 @@ defmodule CAI.Characters.Session do
     embeds_many(:player_facility_captures, ESS.PlayerFacilityCapture)
     embeds_many(:player_facility_defends, ESS.PlayerFacilityDefend)
     embeds_many(:vehicle_destroys, ESS.VehicleDestroy)
-    embeds_many(:login, ESS.PlayerLogin)
-    embeds_many(:logout, ESS.PlayerLogout)
+    embeds_one(:login, ESS.PlayerLogin)
+    embeds_one(:logout, ESS.PlayerLogout)
 
     timestamps()
+  end
+
+  @doc """
+  Builds a session from the given character ID and login/logout unix timestamps.
+
+  Returns a session struct.
+
+  Use this function over `changeset/2` to get the initial session using database values.
+  Use `changeset/2` when you want to update a session after it has been built. `changeset/2` should really only be used
+  if the session is ongoing/live.
+  """
+  def build(character_id, login..logout) do
+    build(character_id, login, logout)
+  end
+
+  def build(character_id, login, logout) when is_integer(login) and is_integer(logout) do
+    changeset =
+      %Session{}
+      |> cast(%{"character_id" => character_id}, [:character_id])
+      |> validate_required([:character_id])
+
+    [
+      {:gain_experiences, GainExperience},
+      {:deaths, Death},
+      {:vehicle_destroys, VehicleDestroy},
+      {:player_facility_captures, PlayerFacilityCapture},
+      {:player_facility_defends, PlayerFacilityDefend},
+      {:battle_rank_ups, BattleRankUp},
+      {:login, PlayerLogin},
+      {:logout, PlayerLogout}
+    ]
+    |> Enum.reduce(changeset, fn {field, module}, changeset ->
+      embed = build_embed(module, character_id, login, logout)
+      put_embed(changeset, field, embed)
+    end)
+    |> apply_action(:update)
+  end
+
+  @embedded_once [PlayerLogin, PlayerLogout]
+  defp build_embed(module, character_id, login, logout) when module in @embedded_once do
+    timestamp = if module == PlayerLogin, do: login, else: logout
+
+    Repo.one(
+      from(log in module,
+        select: log,
+        where: log.character_id == ^character_id and log.timestamp == ^timestamp,
+        limit: 1
+      )
+    )
+  end
+
+  defp build_embed(module, character_id, login, logout) do
+    where_clause =
+      case module do
+        GainExperience ->
+          revive_xp_ids = CAI.revive_xp_ids()
+
+          dynamic(
+            [e],
+            (field(e, :character_id) == ^character_id or
+               (field(e, :other_id) == ^character_id and
+                  field(e, :experience_id) in ^revive_xp_ids)) and
+              (field(e, :timestamp) >= ^login and field(e, :timestamp) <= ^logout)
+          )
+
+        mod when mod in [Deaths, VehicleDestroy] ->
+          dynamic(
+            [e],
+            (field(e, :character_id) == ^character_id or
+               field(e, :attacker_character_id) == ^character_id) and
+              (field(e, :timestamp) >= ^login and field(e, :timestamp) <= ^logout)
+          )
+
+        _ ->
+          dynamic(
+            [e],
+            field(e, :character_id) == ^character_id and
+              (field(e, :timestamp) >= ^login and field(e, :timestamp) <= ^logout)
+          )
+      end
+
+    Repo.all(from(e in module, select: e, where: ^where_clause))
   end
 
   @doc false

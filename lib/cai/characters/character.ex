@@ -5,7 +5,6 @@ defmodule CAI.Characters.Character do
 
   alias CAI.Characters.{
     Outfit,
-    Session,
     Stat,
     StatByFaction,
     StatHistory,
@@ -39,7 +38,6 @@ defmodule CAI.Characters.Character do
     field(:percent_to_next_point, :float)
     field(:battle_rank, :integer)
     field(:percent_to_next_br, :float)
-    embeds_many(:sessions, Session)
     embeds_many(:stat_history, StatHistory)
     embeds_many(:stat, Stat)
     embeds_many(:stat_by_faction, StatByFaction)

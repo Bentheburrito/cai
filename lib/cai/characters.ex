@@ -1,6 +1,7 @@
 defmodule CAI.Characters do
   @moduledoc """
-  The Characters context.
+  The Characters context. Contains functions for interacting with the Census collections as well as locally stored
+  sessions. Manages caches and retries automatically.
   """
 
   import Ecto.Query, warn: false
@@ -9,9 +10,18 @@ defmodule CAI.Characters do
   alias Ecto.Changeset
   alias CAI.Repo
   alias CAI.Characters.{Character, Session}
-  alias CAI.ESS
   alias PS2.API, as: Census
   alias PS2.API.{Join, Query, QueryResult}
+
+  alias CAI.ESS.{
+    Death,
+    GainExperience,
+    PlayerFacilityCapture,
+    PlayerFacilityDefend,
+    PlayerLogin,
+    PlayerLogout,
+    VehicleDestroy
+  }
 
   require Logger
 
@@ -155,86 +165,90 @@ defmodule CAI.Characters do
   end
 
   def get_sessions(character_id, max_sessions) when is_integer(character_id) do
-    where_clause = [character_id: character_id]
+    case list_all_timestamps(character_id) do
+      [_first_pair | _rest] = timestamp_event_type_pairs ->
+        get_sessions(character_id, timestamp_event_type_pairs, max_sessions)
 
-    attack_where_clause =
-      dynamic(
-        [e],
-        field(e, :character_id) == ^character_id or
-          field(e, :attacker_character_id) == ^character_id
-      )
-
-    revive_xp_ids = CAI.revive_xp_ids()
-
-    # Considers GE revive events where other_id is this character (i.e., this character was revived by someone else)
-    ge_where_clause =
-      dynamic(
-        [e],
-        field(e, :character_id) == ^character_id or
-          (field(e, :other_id) == ^character_id and
-             field(e, :experience_id) in ^revive_xp_ids)
-      )
-
-    all_gain_xp = Repo.all(build_event_query(ESS.GainExperience, ge_where_clause))
-    all_deaths = Repo.all(build_event_query(ESS.Death, attack_where_clause))
-    all_vehicle_destroys = Repo.all(build_event_query(ESS.VehicleDestroy, attack_where_clause))
-    all_facility_defs = Repo.all(build_event_query(ESS.PlayerFacilityDefend, where_clause))
-    all_facility_caps = Repo.all(build_event_query(ESS.PlayerFacilityCapture, where_clause))
-    logins = Repo.all(build_event_query(ESS.PlayerLogin, where_clause))
-    logouts = Repo.all(build_event_query(ESS.PlayerLogout, where_clause))
-    all_br_ups = Repo.all(build_event_query(ESS.BattleRankUp, where_clause))
-
-    # Keep the bigger lists to the right of ++ ...still very slow, would be very nice to find a way to do this at the DB
-    # level. See TODO above for optimizing?
-    events = all_deaths ++ all_gain_xp
-    events = all_vehicle_destroys ++ events
-    events = all_facility_defs ++ events
-    events = all_facility_caps ++ events
-    events = logins ++ events
-    events = logouts ++ events
-    events = all_br_ups ++ events
-    events = Enum.sort_by(events, & &1.timestamp, :desc)
-
-    # from here, need to split events into distinct sessions...
-  end
-
-  defp ge_where_clause(character_id, login_timestamp) do
-    revive_xp_ids = CAI.revive_xp_ids()
-
-    dynamic(
-      [e],
-      (field(e, :character_id) == ^character_id and
-         field(e, :timestamp) >= ^login_timestamp) or
-        (field(e, :other_id) == ^character_id and
-           field(e, :experience_id) in ^revive_xp_ids and
-           field(e, :timestamp) >= ^login_timestamp)
-    )
-  end
-
-  defp get_logout_timestamp(character_id, login_timestamp) do
-    query =
-      from(event in ESS.PlayerLogout,
-        select: min(event.timestamp),
-        where: event.character_id == ^character_id and event.timestamp > ^login_timestamp
-      )
-
-    case Repo.one(query) do
-      nil -> :current_session
-      logout_timestamp -> logout_timestamp
+      # no previous sessions 😱
+      [] ->
+        {:ok, []}
     end
   end
 
-  defp build_event_query(event_module, conditional) do
-    from(event in event_module, where: ^conditional, order_by: [desc: :timestamp])
+  defp get_sessions(character_id, [first_pair | timestamp_event_type_pairs], max_sessions) do
+    %{timestamp: first_pair_timestamp} = first_pair
+    init_acc = {first_pair, first_pair_timestamp, []}
+
+    timestamp_event_type_pairs
+    |> Enum.reduce_while(init_acc, &session_reducer(&1, &2, max_sessions))
+    |> case do
+      # Special case: when the character only has one session, the acc will be empty, and first_pair_timestamp
+      # won't have changed.
+      {_, ^first_pair_timestamp, []} ->
+        session =
+          {:ok, session} =
+          Session.build(
+            character_id,
+            List.last(timestamp_event_type_pairs).timestamp,
+            first_pair_timestamp
+          )
+
+        {:ok, [session]}
+
+      {_, _, timestamp_pairs} ->
+        sessions =
+          Enum.map(timestamp_pairs, fn {login, logout} ->
+            {:ok, session} = Session.build(character_id, login, logout)
+            session
+          end)
+
+        {:ok, sessions}
+    end
   end
 
-  defp build_where_clause(clause, logout_timestamp) do
-    case logout_timestamp do
-      :current_session ->
-        clause
+  # Note: we are reducing in descending order, so "last_" values are actually chronologically later than `event`.
+  defp session_reducer(event, {%{timestamp: last_ts, type: last_t}, end_ts, acc}, max_sessions) do
+    %{timestamp: ts, type: t} = event
 
-      logout_timestamp ->
-        dynamic([e], field(e, :timestamp) <= ^logout_timestamp and ^clause)
+    if session_boundary?(t, last_t, ts, last_ts) do
+      action = if length(acc) + 1 >= max_sessions, do: :halt, else: :cont
+      {action, {event, ts, [{last_ts, end_ts} | acc]}}
+    else
+      {:cont, {event, end_ts, acc}}
     end
+  end
+
+  @session_boundary_secs 30 * 60
+  defp session_boundary?(_, "login", _, _), do: true
+  defp session_boundary?("logout", _, _, _), do: true
+  defp session_boundary?(_, _, ts1, ts2), do: ts2 - ts1 > @session_boundary_secs
+
+  defp list_all_timestamps(character_id) do
+    init_query =
+      from(ge in GainExperience,
+        select: %{timestamp: ge.timestamp, type: "ge"},
+        where: ge.character_id == ^character_id
+      )
+
+    [
+      {Death, "death"},
+      {VehicleDestroy, "vd"},
+      {PlayerFacilityCapture, "pfc"},
+      {PlayerFacilityDefend, "pfd"},
+      {PlayerLogin, "login"},
+      {PlayerLogout, "logout"}
+    ]
+    |> Enum.reduce(init_query, fn {mod, type}, query ->
+      to_union =
+        from(e in mod,
+          select: %{timestamp: e.timestamp, type: ^type},
+          where: e.character_id == ^character_id
+        )
+
+      union_all(query, ^to_union)
+    end)
+    |> subquery()
+    |> order_by(desc: :timestamp)
+    |> Repo.all()
   end
 end
