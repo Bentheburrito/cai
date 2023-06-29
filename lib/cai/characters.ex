@@ -177,44 +177,37 @@ defmodule CAI.Characters do
 
   defp get_sessions(character_id, [first_pair | timestamp_event_type_pairs], max_sessions) do
     %{timestamp: first_pair_timestamp} = first_pair
-    init_acc = {first_pair, first_pair_timestamp, []}
+    init_acc = {first_pair, first_pair_timestamp, length(timestamp_event_type_pairs), []}
 
-    timestamp_event_type_pairs
-    |> Enum.reduce_while(init_acc, &session_reducer(&1, &2, max_sessions))
-    |> case do
-      # Special case: when the character only has one session, the acc will be empty, and first_pair_timestamp
-      # won't have changed.
-      {_, ^first_pair_timestamp, []} ->
-        session =
-          {:ok, session} =
-          Session.build(
-            character_id,
-            List.last(timestamp_event_type_pairs).timestamp,
-            first_pair_timestamp
-          )
+    {_, _, _, timestamp_pairs} =
+      timestamp_event_type_pairs
+      |> Stream.with_index(1)
+      |> Enum.reduce_while(init_acc, &session_reducer(&1, &2, max_sessions))
 
-        {:ok, [session]}
+    sessions =
+      Enum.map(timestamp_pairs, fn {login, logout} ->
+        {:ok, session} = Session.build(character_id, login, logout)
+        session
+      end)
 
-      {_, _, timestamp_pairs} ->
-        sessions =
-          Enum.map(timestamp_pairs, fn {login, logout} ->
-            {:ok, session} = Session.build(character_id, login, logout)
-            session
-          end)
-
-        {:ok, sessions}
-    end
+    {:ok, sessions}
   end
 
   # Note: we are reducing in descending order, so "last_" values are actually chronologically later than `event`.
-  defp session_reducer(event, {%{timestamp: last_ts, type: last_t}, end_ts, acc}, max_sessions) do
+  defp session_reducer({event, index}, {last_event, end_ts, end_index, acc}, max_sessions) do
     %{timestamp: ts, type: t} = event
+    %{timestamp: last_ts, type: last_t} = last_event
 
-    if session_boundary?(t, last_t, ts, last_ts) do
-      action = if length(acc) + 1 >= max_sessions, do: :halt, else: :cont
-      {action, {event, ts, [{last_ts, end_ts} | acc]}}
-    else
-      {:cont, {event, end_ts, acc}}
+    cond do
+      index == end_index ->
+        {:halt, {event, ts, end_index, [{last_ts, end_ts} | acc]}}
+
+      session_boundary?(t, last_t, ts, last_ts) ->
+        action = if length(acc) + 1 >= max_sessions, do: :halt, else: :cont
+        {action, {event, ts, end_index, [{last_ts, end_ts} | acc]}}
+
+      :else ->
+        {:cont, {event, end_ts, end_index, acc}}
     end
   end
 
