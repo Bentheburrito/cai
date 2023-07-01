@@ -18,3 +18,17 @@
 .animate-fade {
   animation: fade 1s ease-in infinite;
 }
+
+@keyframes slow-blink {
+  50%, 75% {
+    opacity: 0%;
+  }
+
+  75%, 100% {
+    opacity: 100%;
+  }
+}
+
+.animate-slow-blink {
+  animation: slow-blink 4s ease-in-out infinite;
+}

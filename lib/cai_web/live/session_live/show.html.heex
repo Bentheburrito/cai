@@ -14,15 +14,24 @@
 </.header>
 
 <div :if={@streams}>
-  <h3 class="m-2">Live Event Feed</h3>
-  <div
-    id="ess-events"
-    phx-update="stream"
-    class="border-solid border-4 m-1 p-2 rounded-2xl border-gray-400"
-  >
-    <div :for={{dom_id, {event, character, other}} <- @streams.events} id={dom_id}>
-      <.event_item event={event} character={character} other={other} />
-    </div>
+  <h3 class="m-2">
+    <span :if={@live?}><span class="animate-slow-blink">🔴</span> Live</span> Event Feed
+  </h3>
+  <div class="border-solid border-4 m-1 p-2 rounded-2xl border-gray-400">
+    <span id="live-event-feed" phx-update="stream">
+      <.event_item
+        :for={{dom_id, {event, character, other}} <- @streams.events}
+        event={event}
+        character={character}
+        other={other}
+        id={dom_id}
+      />
+    </span>
+    <span class="flex justify-center">
+      <.button class="absolute mx-auto border-solid border-2 border-gray-400">
+        Load More
+      </.button>
+    </span>
   </div>
 </div>
 
