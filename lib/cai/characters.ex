@@ -64,23 +64,23 @@ defmodule CAI.Characters do
 
   TODO: return cached_at on cache hit, and remaining TTL?
   """
-  @spec get_character(character_reference()) :: {:ok, Character.t()} | :not_found | :error
-  def get_character(0), do: :not_found
+  @spec fetch(character_reference()) :: {:ok, Character.t()} | :not_found | :error
+  def fetch(0), do: :not_found
 
-  def get_character(name) when is_binary(name) do
+  def fetch(name) when is_binary(name) do
     name_lower = String.downcase(name)
 
     case Cachex.get(:character_name_map, name_lower) do
       {:ok, nil} ->
         query = term(@query_base, "name.first_lower", name_lower)
-        query_character(query)
+        fetch_by_query(query)
 
       {:ok, character_id} ->
-        get_character(character_id)
+        fetch(character_id)
     end
   end
 
-  def get_character(character_id) when is_integer(character_id) do
+  def fetch(character_id) when is_integer(character_id) do
     with {:ok, %Character{} = char} <- Cachex.get(:character_cache, character_id),
          {:ok, true} <-
            Cachex.put(:character_cache, char.name_first_lower, character_id, @put_opts) do
@@ -88,7 +88,7 @@ defmodule CAI.Characters do
     else
       {:ok, nil} ->
         query = term(@query_base, "character_id", character_id)
-        query_character(query)
+        fetch_by_query(query)
 
       {:error, _} ->
         Logger.error("Could not access :character_cache")
@@ -99,13 +99,13 @@ defmodule CAI.Characters do
   @doc """
   Runs the given character Census query, updating caches and parsing the result into a `Character` struct.
 
-  Defaults to a maximum of #{@default_census_attempts} attempts. Returns the same as `get_character/1`.
+  Defaults to a maximum of #{@default_census_attempts} attempts. Returns the same as `fetch/1`.
   """
-  @spec query_character(Query.t(), integer()) :: {:ok, Character.t()} | :not_found | :error
-  def query_character(query, remaining_tries \\ @default_census_attempts)
-  def query_character(_query, remaining_tries) when remaining_tries == 0, do: :error
+  @spec fetch_by_query(Query.t(), integer()) :: {:ok, Character.t()} | :not_found | :error
+  def fetch_by_query(query, remaining_tries \\ @default_census_attempts)
+  def fetch_by_query(_query, remaining_tries) when remaining_tries == 0, do: :error
 
-  def query_character(query, remaining_tries) do
+  def fetch_by_query(query, remaining_tries) do
     with {:ok, %QueryResult{data: data, returned: returned}} when returned > 0 <-
            Census.query_one(query, CAI.sid()),
          {:ok, char} <-
@@ -129,7 +129,7 @@ defmodule CAI.Characters do
           "CharacterCache query returned error (#{remaining_tries - 1} attempts remain): #{inspect(e)}"
         )
 
-        query_character(query, remaining_tries - 1)
+        fetch_by_query(query, remaining_tries - 1)
     end
   end
 
@@ -141,41 +141,56 @@ defmodule CAI.Characters do
 
   Sessions are fetched in reverse chronological order (latest -> oldest). `max_sessions` defaults to
   #{@default_session_count}.
-
-  TODO: Optimize this function. We need a better strategy to distinguish sessions based on the total collection of ESS
-  events. Might need a mapping table/cache managed at the application layer, which the nostrum consumer uses to classify
-  events under a session as they're received, rather than later when querying here.
   """
   @spec get_sessions(character_reference(), max_sessions :: integer()) ::
           {:ok, [Session.t()]} | :not_found | :error
-  def get_sessions(character_id, max_sessions \\ @default_session_count)
+  def get_sessions(character_ref, max_sessions) do
+    with {:ok, character_id, timestamp_pairs} <-
+           get_session_boundaries(character_ref, max_sessions) do
+      sessions =
+        Enum.map(timestamp_pairs, fn {login, logout} ->
+          {:ok, session} = Session.build(character_id, login, logout)
+          session
+        end)
 
-  def get_sessions(character_name, max_sessions) when is_binary(character_name) do
-    case get_character(character_name) do
+      {:ok, sessions}
+    end
+  end
+
+  @spec get_session_boundaries(character_reference(), max_sessions :: integer()) ::
+          {:ok, character_id, [{integer(), integer()}]} | :not_found | :error
+  def get_session_boundaries(character_id, max_sessions \\ @default_session_count)
+
+  def get_session_boundaries(character_name, max_sessions) when is_binary(character_name) do
+    case fetch(character_name) do
       {:ok, %Character{character_id: character_id}} ->
-        get_sessions(character_id, max_sessions)
+        get_session_boundaries(character_id, max_sessions)
 
       :not_found ->
         :not_found
 
       :error ->
-        Logger.error("get_sessions/2 failed to fetch character, #{character_name}")
+        Logger.error("get_session_boundaries/2 failed to fetch character, #{character_name}")
         :error
     end
   end
 
-  def get_sessions(character_id, max_sessions) when is_integer(character_id) do
+  def get_session_boundaries(character_id, max_sessions) when is_integer(character_id) do
     case list_all_timestamps(character_id) do
       [_first_pair | _rest] = timestamp_event_type_pairs ->
-        get_sessions(character_id, timestamp_event_type_pairs, max_sessions)
+        get_session_boundaries(character_id, timestamp_event_type_pairs, max_sessions)
 
       # no previous sessions 😱
       [] ->
-        {:ok, []}
+        {:ok, character_id, []}
     end
   end
 
-  defp get_sessions(character_id, [first_pair | timestamp_event_type_pairs], max_sessions) do
+  defp get_session_boundaries(
+         character_id,
+         [first_pair | timestamp_event_type_pairs],
+         max_sessions
+       ) do
     %{timestamp: first_pair_timestamp} = first_pair
     init_acc = {first_pair, first_pair_timestamp, length(timestamp_event_type_pairs), []}
 
@@ -184,13 +199,7 @@ defmodule CAI.Characters do
       |> Stream.with_index(1)
       |> Enum.reduce_while(init_acc, &session_reducer(&1, &2, max_sessions))
 
-    sessions =
-      Enum.map(timestamp_pairs, fn {login, logout} ->
-        {:ok, session} = Session.build(character_id, login, logout)
-        session
-      end)
-
-    {:ok, sessions}
+    {:ok, character_id, Enum.reverse(timestamp_pairs)}
   end
 
   # Note: we are reducing in descending order, so "last_" values are actually chronologically later than `event`.

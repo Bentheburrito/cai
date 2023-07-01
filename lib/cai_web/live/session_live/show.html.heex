@@ -1,19 +1,13 @@
 <.header :if={@character}>
   <img class="h-20 w-20" src={CAI.factions()[@character.faction_id].image} />
 
-  <%= if @character.outfit do %>
-    [<%= @character.outfit.alias %>]
-  <% end %>
+  <span :if={@character.outfit}>[<%= @character.outfit.alias %>]</span>
   <%= @character.name_first %>
+
   <:subtitle><%= @character.character_id %></:subtitle>
-  <%!-- <:actions>
-    <.link patch={~p"/sessions/#{@session}/show/edit"} phx-click={JS.push_focus()}>
-      <.button>Edit session</.button>
-    </.link>
-  </:actions> --%>
 </.header>
 
-<div :if={@streams}>
+<div :if={assigns[:streams][:events]}>
   <h3 class="m-2">
     <span :if={@live?}><span class="animate-slow-blink">🔴</span> Live</span> Event Feed
   </h3>

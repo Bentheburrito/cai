@@ -18,8 +18,8 @@ defmodule CAIWeb.Router do
     pipe_through(:browser)
 
     get("/", PageController, :home)
-    live("/sessions", SessionLive.List, :list)
-    live("/sessions/:character_id", SessionLive.Show, :show)
+    live("/sessions/:character_id", SessionLive.List, :list)
+    live("/sessions/:character_id/show", SessionLive.Show, :show)
   end
 
   # Other scopes may use custom stacks.
