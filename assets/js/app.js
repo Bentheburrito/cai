@@ -22,8 +22,38 @@ import { Socket } from "phoenix"
 import { LiveSocket } from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 
+const formatTimestamp = context => {
+  // The inner HTML should be a unix timestamp.
+  const timestamp = parseInt(context.el.innerHTML);
+  if (!timestamp) {
+    console.error(`formatTimestamp: element's inner HTML is not an int: ${context.el.innerHTML}`);
+    return;
+  }
+
+  // Multiply by 1000 to convert to MS and create a Date obj.
+  const dateTimeObject = new Date(timestamp * 1000);
+  if (!dateTimeObject) {
+    console.error(`formatTimestamp: could not parse new Date(${timestamp * 1000})`);
+    return;
+  }
+
+  context.el.innerHTML = `${dateTimeObject.toLocaleDateString()} @ ${dateTimeObject.toLocaleTimeString()}`;
+}
+
+const Hooks = {
+  // Format the given element when it is added or updated
+  FormatTimestamp: {
+    mounted () {
+      formatTimestamp(this);
+    },
+    updated () {
+      formatTimestamp(this);
+    }
+  }
+};
+
 let csrfToken = document.querySelector("meta[name='csrf-token']").getAttribute("content")
-let liveSocket = new LiveSocket("/live", Socket, { params: { _csrf_token: csrfToken } })
+let liveSocket = new LiveSocket("/live", Socket, { hooks: Hooks, params: { _csrf_token: csrfToken } })
 
 // Show progress bar on live navigation and form submits
 topbar.config({ barColors: { 0: "#29d" }, shadowColor: "rgba(0, 0, 0, .3)" })

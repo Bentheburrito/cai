@@ -5,6 +5,7 @@ defmodule CAIWeb.SessionLive.List do
 
   alias CAI.Characters
   alias CAI.Characters.Character
+  alias Phoenix.LiveView.JS
 
   @impl true
   def mount(_params, _session, socket) do

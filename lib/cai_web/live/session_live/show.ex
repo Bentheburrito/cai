@@ -58,8 +58,6 @@ defmodule CAIWeb.SessionLive.Show do
         PubSub.subscribe(CAI.PubSub, "ess:#{character.character_id}")
       end
 
-      IO.inspect(socket.assigns[:streams][:__configured__], label: "configured")
-
       {
         :noreply,
         socket

@@ -39,4 +39,16 @@ defmodule CAIWeb.Utils do
          |> assign(:page_title, "#{param} is not a number!")}
     end
   end
+
+  def format_duration(start_seconds, end_seconds) do
+    total_seconds = end_seconds - start_seconds
+    seconds = total_seconds |> rem(3600) |> rem(60)
+    minutes = total_seconds |> rem(3600) |> div(60)
+    hours = div(total_seconds, 3600)
+
+    [{hours, "hours"}, {minutes, "minutes"}, {seconds, "seconds"}]
+    |> Stream.filter(fn {duration, _unit} -> duration > 0 end)
+    |> Stream.map(fn {duration, unit} -> "#{duration} #{unit}" end)
+    |> Enum.join(" ")
+  end
 end
