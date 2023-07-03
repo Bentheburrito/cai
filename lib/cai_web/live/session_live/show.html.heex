@@ -1,4 +1,4 @@
-<.character_header :if={assigns[:character]} character={@character}/>
+<.character_header :if={assigns[:character]} character={@character} />
 
 <div :if={assigns[:streams][:events]}>
   <h3 class="m-2">
@@ -13,9 +13,20 @@
         other={other}
         id={dom_id}
       />
+      <%!-- <span :if={need a way to show this if the stream is empty} class="italic">
+        In-game events will be displayed here as they occur
+      </span> --%>
     </span>
-    <span class="flex justify-center">
-      <.button class="absolute mx-auto border-solid border-2 border-gray-400">
+    <%!-- pattern matching against empty list, since `length/1` is O(n) --%>
+    <span
+      :if={is_list(assigns[:remaining_events]) and not match?([], assigns[:remaining_events])}
+      class="flex justify-center"
+    >
+      <.button
+        id="load-more-button"
+        phx-click="load-more-events"
+        class="absolute mx-auto border-solid border-2 border-gray-400"
+      >
         Load More
       </.button>
     </span>
@@ -23,4 +34,3 @@
 
   <.back navigate={~p"/sessions/#{@character.character_id}"}>Back to sessions</.back>
 </div>
-

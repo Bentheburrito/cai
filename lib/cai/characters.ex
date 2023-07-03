@@ -31,7 +31,7 @@ defmodule CAI.Characters do
 
   @cache_ttl_ms 12 * 60 * 60 * 1000
   @put_opts [ttl: @cache_ttl_ms]
-  @httpoison_timeout_ms 10 * 1000
+  @httpoison_timeout_ms 12 * 1000
   @default_census_attempts 3
   @query_base Query.new(collection: "character")
               |> resolve([
@@ -103,13 +103,15 @@ defmodule CAI.Characters do
   """
   @spec fetch_by_query(Query.t(), integer()) :: {:ok, Character.t()} | :not_found | :error
   def fetch_by_query(query, remaining_tries \\ @default_census_attempts)
-  def fetch_by_query(_query, remaining_tries) when remaining_tries == 0, do: :error
+
+  def fetch_by_query(_query, remaining_tries) when remaining_tries == 0 do
+    Logger.error("remaining_tries == 0, returning :error")
+    :error
+  end
 
   def fetch_by_query(query, remaining_tries) do
-    with {:ok, %QueryResult{data: data, returned: returned}} when returned > 0 <-
-           Census.query_one(query, CAI.sid()),
-         {:ok, char} <-
-           %Character{} |> Character.changeset(data) |> Changeset.apply_action(:update) do
+    with {:ok, %QueryResult{data: data, returned: returned}} when returned > 0 <- Census.query_one(query, CAI.sid()),
+         {:ok, char} <- %Character{} |> Character.changeset(data) |> Changeset.apply_action(:update) do
       Cachex.put(:character_cache, char.character_id, char, @put_opts)
       Cachex.put(:character_name_map, char.name_first_lower, char.character_id, @put_opts)
       {:ok, char}
@@ -172,7 +174,11 @@ defmodule CAI.Characters do
   """
   @spec get_many_by_query(Query.t()) :: %{character_id() => Character.t() | :not_found | :error}
   def get_many_by_query(query, remaining_tries \\ @default_census_attempts)
-  def get_many_by_query(_query, remaining_tries) when remaining_tries == 0, do: %{}
+
+  def get_many_by_query(_query, remaining_tries) when remaining_tries == 0 do
+    Logger.error("remaining_tries == 0, returning %{}")
+    %{}
+  end
 
   def get_many_by_query(query, remaining_tries) do
     case Census.query(query, CAI.sid(), recv_timeout: @httpoison_timeout_ms) do

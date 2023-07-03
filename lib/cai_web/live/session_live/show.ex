@@ -50,6 +50,7 @@ defmodule CAIWeb.SessionLive.Show do
         |> assign(:page_title, "#{character.name_first}'s Previous Session")
         |> assign(:bounds, {login, logout})
         |> assign(:character, character)
+        |> assign(:live?, false)
       }
     end
   end
@@ -80,6 +81,28 @@ defmodule CAIWeb.SessionLive.Show do
 
   ### HANDLE EVENTS AND MESSAGES ###
 
+  # Stream some more events (if there are any) when "Load More" is clicked
+  @impl true
+  def handle_event("load-more-events", _params, socket) do
+    new_events_limit = Map.get(socket.assigns, :events_limit, @events_limit) + @events_limit
+
+    case Enum.split(socket.assigns.remaining_events, @events_limit) do
+      {[], _} ->
+        {:noreply, assign(socket, :remaining_events, [])}
+
+      {events_to_stream, remaining_events} ->
+        event_tuples = map_events_to_tuples(events_to_stream, socket.assigns.character)
+
+        {
+          :noreply,
+          socket
+          |> stream(:events, event_tuples, at: @append, limit: new_events_limit)
+          |> assign(:events_limit, new_events_limit)
+          |> assign(:remaining_events, remaining_events)
+        }
+    end
+  end
+
   # Live Session - receive a new event via PubSub
   @impl true
   def handle_info({:event, %Ecto.Changeset{} = event_cs}, socket) do
@@ -108,7 +131,7 @@ defmodule CAIWeb.SessionLive.Show do
       |> MapSet.delete(0)
       |> MapSet.delete(character.character_id)
 
-    other_character_map = Characters.get_many(other_character_ids)
+    other_character_map = other_character_ids |> Characters.get_many() |> Map.put(character.character_id, character)
 
     Enum.map(init_events, fn e ->
       other = get_other_character(character.character_id, e, &Map.fetch(other_character_map, &1))
@@ -144,6 +167,10 @@ defmodule CAIWeb.SessionLive.Show do
 
       {{:ok, %Character{} = other}, _other_id} ->
         other
+
+      {{:ok, :not_found}, other_id} ->
+        Logger.info("Did you query for a non-character ID? Got {:ok, :not_found} for #{other_id}")
+        {:unavailable, other_id}
 
       {reason, other_id} ->
         if other_id != 0 do
