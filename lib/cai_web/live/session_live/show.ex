@@ -15,6 +15,8 @@ defmodule CAIWeb.SessionLive.Show do
   @append -1
   @events_limit 15
 
+  ### MOUNT AND HANDLE_PARAMS ###
+
   @impl true
   def mount(_params, _session, socket) do
     {
@@ -38,43 +40,15 @@ defmodule CAIWeb.SessionLive.Show do
          {:ok, event_history} <- get_session_history(character.character_id, login, logout, socket) do
       {init_events, remaining_events} = Enum.split(event_history, @events_limit)
 
-      other_character_ids =
-        Stream.flat_map(
-          init_events,
-          &(Map.take(&1, [:character_id, :attacker_character_id, :other_id]) |> Map.values())
-        )
-        |> MapSet.new()
-        |> MapSet.delete(nil)
-        |> MapSet.delete(0)
-        |> MapSet.delete(character.character_id)
-
-      other_character_map = Characters.get_many(other_character_ids)
-
-      init_event_tuples =
-        Enum.map(init_events, fn e ->
-          other =
-            case get_other_character(character.character_id, e, &Map.fetch(other_character_map, &1)) do
-              :noop ->
-                :noop
-
-              {{:ok, %Character{} = other}, _other_id} ->
-                other
-
-              {reason, other_id} ->
-                put_flash(socket, :info, "Couldn't fetch the character for an event: #{inspect(reason)}")
-                {:unavailable, other_id}
-            end
-
-          {e, character, other}
-        end)
+      init_event_tuples = map_events_to_tuples(init_events, character)
 
       {
         :noreply,
         socket
         |> stream(:events, init_event_tuples, reset: true, at: @append, limit: @events_limit)
+        |> assign(:remaining_events, remaining_events)
         |> assign(:page_title, "#{character.name_first}'s Previous Session")
         |> assign(:bounds, {login, logout})
-        |> assign(:remaining_events, remaining_events)
         |> assign(:character, character)
       }
     end
@@ -84,12 +58,12 @@ defmodule CAIWeb.SessionLive.Show do
   @impl true
   def handle_params(%{"character_id" => character_id}, _, socket) do
     with {:ok, %Character{} = character} <- get_character(character_id, socket) do
-      # Unsubscribe from the previously tracked character (if there is one)
-      if socket.assigns[:character] do
-        PubSub.unsubscribe(CAI.PubSub, "ess:#{socket.assigns.character.character_id}")
-      end
-
       if connected?(socket) do
+        # Unsubscribe from the previously tracked character (if there is one)
+        if socket.assigns[:character] do
+          PubSub.unsubscribe(CAI.PubSub, "ess:#{socket.assigns.character.character_id}")
+        end
+
         PubSub.subscribe(CAI.PubSub, "ess:#{character.character_id}")
       end
 
@@ -104,29 +78,43 @@ defmodule CAIWeb.SessionLive.Show do
     end
   end
 
+  ### HANDLE EVENTS AND MESSAGES ###
+
+  # Live Session - receive a new event via PubSub
   @impl true
   def handle_info({:event, %Ecto.Changeset{} = event_cs}, socket) do
     event = Ecto.Changeset.apply_changes(event_cs)
     character = socket.assigns.character
 
-    other =
-      case get_other_character(character.character_id, event) do
-        :noop ->
-          :noop
-
-        {{:ok, %Character{} = other}, _other_id} ->
-          other
-
-        {reason, other_id} ->
-          put_flash(socket, :info, "Couldn't fetch the character for an event: #{reason}")
-          {:unavailable, other_id}
-      end
+    other = get_other_character(character.character_id, event)
 
     {:noreply,
      stream_insert(socket, :events, {event, character, other},
        at: @prepend,
        limit: @events_limit
      )}
+  end
+
+  ### HELPERS ###
+
+  defp map_events_to_tuples(init_events, character) do
+    other_character_ids =
+      Stream.flat_map(
+        init_events,
+        &(Map.take(&1, [:character_id, :attacker_character_id, :other_id]) |> Map.values())
+      )
+      |> MapSet.new()
+      |> MapSet.delete(nil)
+      |> MapSet.delete(0)
+      |> MapSet.delete(character.character_id)
+
+    other_character_map = Characters.get_many(other_character_ids)
+
+    Enum.map(init_events, fn e ->
+      other = get_other_character(character.character_id, e, &Map.fetch(other_character_map, &1))
+
+      {e, character, other}
+    end)
   end
 
   defp get_session_history(character_id, login, logout, socket) do
@@ -146,28 +134,45 @@ defmodule CAIWeb.SessionLive.Show do
     end
   end
 
+  # Gets the character struct for the other character in this interaction (if there is one)
   defp get_other_character(this_char_id, event, fetch_fn \\ &Characters.fetch/1)
 
-  # Gets the character struct for the other character in this interaction (if there is one)
-  defp get_other_character(this_char_id, %GainExperience{character_id: this_char_id} = ge, fetch_fn) do
+  defp get_other_character(this_char_id, event, fetch_fn) do
+    case do_get_other_character(this_char_id, event, fetch_fn) do
+      :noop ->
+        :noop
+
+      {{:ok, %Character{} = other}, _other_id} ->
+        other
+
+      {reason, other_id} ->
+        if other_id != 0 do
+          Logger.warning("Couldn't fetch other character (ID #{inspect(other_id)}) for an event: #{inspect(reason)}")
+        end
+
+        {:unavailable, other_id}
+    end
+  end
+
+  defp do_get_other_character(this_char_id, %GainExperience{character_id: this_char_id} = ge, fetch_fn) do
     {fetch_fn.(ge.other_id), ge.other_id}
   end
 
-  defp get_other_character(this_char_id, %GainExperience{other_id: this_char_id} = ge, fetch_fn) do
+  defp do_get_other_character(this_char_id, %GainExperience{other_id: this_char_id} = ge, fetch_fn) do
     {fetch_fn.(ge.character_id), ge.character_id}
   end
 
-  defp get_other_character(this_char_id, %mod{character_id: this_char_id} = e, fetch_fn)
+  defp do_get_other_character(this_char_id, %mod{character_id: this_char_id} = e, fetch_fn)
        when mod in [Death, VehicleDestroy] do
     {fetch_fn.(e.attacker_character_id), e.attacker_character_id}
   end
 
-  defp get_other_character(this_char_id, %mod{attacker_character_id: this_char_id} = e, fetch_fn)
+  defp do_get_other_character(this_char_id, %mod{attacker_character_id: this_char_id} = e, fetch_fn)
        when mod in [Death, VehicleDestroy] do
     {fetch_fn.(e.character_id), e.character_id}
   end
 
-  defp get_other_character(_, _, _), do: :noop
+  defp do_get_other_character(_, _, _), do: :noop
 
   defp event_to_dom_id({event, _, _}) do
     hash = :md5 |> :crypto.hash(inspect(event)) |> Base.encode16()

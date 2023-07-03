@@ -139,7 +139,7 @@ defmodule CAI.Characters do
   """
   @spec get_many(Enum.t()) :: %{character_id() => Character.t() | :not_found | :error}
   def get_many(character_ids) do
-    for id when is_integer(id) <- character_ids, reduce: {[], %{}} do
+    for id when is_integer(id) and id != 0 <- character_ids, reduce: {[], %{}} do
       {uncached_ids, character_map} ->
         with {:ok, %Character{} = char} <- Cachex.get(:character_cache, id),
              {:ok, true} <- Cachex.put(:character_name_map, char.name_first_lower, id, @put_opts) do
