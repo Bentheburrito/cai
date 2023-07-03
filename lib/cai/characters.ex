@@ -134,58 +134,78 @@ defmodule CAI.Characters do
 
   Similar to `fetch/1`, except it takes many character IDs, and returns a map. The map is keyed by the given character
   IDs, and the values will be the result of the query (see `fetch/1` return values).
-
-  TODO: refactor the hell out of this...
   """
   @spec get_many(Enum.t()) :: %{character_id() => Character.t() | :not_found | :error}
   def get_many(character_ids) do
-    for id when is_integer(id) and id != 0 <- character_ids, reduce: {[], %{}} do
-      {uncached_ids, character_map} ->
-        with {:ok, %Character{} = char} <- Cachex.get(:character_cache, id),
-             {:ok, true} <- Cachex.put(:character_name_map, char.name_first_lower, id, @put_opts) do
+    # Step 1: Check the cache for these IDs, keeping track of IDs that are not in the cache.
+    Enum.reduce(character_ids, {[], %{}}, fn id, {uncached_ids, character_map} when is_integer(id) and id != 0 ->
+      case Cachex.get(:character_cache, id) do
+        {:ok, %Character{} = char} ->
           {uncached_ids, Map.put(character_map, char.character_id, char)}
-        else
-          {:ok, nil} ->
-            {[id | uncached_ids], Map.put(character_map, id, :not_found)}
 
-          {:error, _} ->
-            Logger.error("Could not access :character_cache")
-            {uncached_ids, character_map}
-        end
-    end
+        {:ok, nil} ->
+          {[id | uncached_ids], Map.put(character_map, id, :not_found)}
+
+        {:error, _} ->
+          Logger.error("Could not access :character_cache")
+          {uncached_ids, character_map}
+      end
+    end)
+    # Step 2: If there are uncached_ids, query Census for them
     |> case do
       {[], character_map} ->
         character_map
 
       {uncached_ids, character_map} ->
         query = term(@query_base, "character_id", uncached_ids)
+        new_character_map = get_many_by_query(query)
+        # Must merge this way, since map2 key values override map1's
+        Map.merge(character_map, new_character_map)
+    end
+  end
 
-        with {:ok, %QueryResult{data: data, returned: returned}} when returned > 0 <- Census.query(query, CAI.sid()) do
-          for params <- data, reduce: character_map do
-            char_map ->
-              case %Character{} |> Character.changeset(params) |> Changeset.apply_action(:update) do
-                {:ok, char} ->
-                  Cachex.put(:character_cache, char.character_id, char, @put_opts)
-                  Cachex.put(:character_name_map, char.name_first_lower, char.character_id, @put_opts)
-                  Map.put(char_map, char.character_id, char)
+  @doc """
+  Runs the given multi-character Census query, updating caches and parsing the result into a map of `Character` structs
+  (see `get_many/1` above).
 
-                {:error, changeset} ->
-                  Logger.error(
-                    "Could not parse census character response into a Character struct: #{inspect(changeset.errors)}"
-                  )
+  Defaults to a maximum of #{@default_census_attempts} attempts. Returns the same as `get_many/1`.
+  """
+  @spec get_many_by_query(Query.t()) :: %{character_id() => Character.t() | :not_found | :error}
+  def get_many_by_query(query, remaining_tries \\ @default_census_attempts)
+  def get_many_by_query(_query, remaining_tries) when remaining_tries == 0, do: %{}
 
-                  char_map
-              end
-          end
-        else
-          {:ok, %QueryResult{returned: 0}} ->
-            character_map
+  def get_many_by_query(query, remaining_tries) do
+    case Census.query(query, CAI.sid(), recv_timeout: @httpoison_timeout_ms) do
+      {:ok, %QueryResult{data: data, returned: returned}} when returned > 0 ->
+        Enum.reduce(data, %{}, &get_many_reducer/2)
 
-          {:error, e} ->
-            Logger.warning("CharacterCache query returned error (not attempting to retry): #{inspect(e)}")
+      {:ok, %QueryResult{returned: 0}} ->
+        %{}
 
-            character_map
-        end
+      {:error, e} ->
+        Logger.warning("CharacterCache query returned error (#{remaining_tries - 1} attempts remain): #{inspect(e)}")
+
+        get_many_by_query(query, remaining_tries - 1)
+    end
+  end
+
+  # Helper function that attempts to build a Character struct from a census response. Caches the Character upon success.
+  defp get_many_reducer(character_params, character_map) do
+    maybe_character =
+      %Character{}
+      |> Character.changeset(character_params)
+      |> Changeset.apply_action(:update)
+
+    case maybe_character do
+      {:ok, %Character{character_id: character_id} = character} ->
+        Cachex.put(:character_cache, character_id, character, @put_opts)
+        Cachex.put(:character_name_map, character.name_first_lower, character_id, @put_opts)
+        Map.put(character_map, character_id, character)
+
+      {:error, changeset} ->
+        Logger.error("Could not parse census character response into a Character struct: #{inspect(changeset.errors)}")
+
+        character_map
     end
   end
 
