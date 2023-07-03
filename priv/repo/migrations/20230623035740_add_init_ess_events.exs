@@ -28,9 +28,9 @@ defmodule CAI.Repo.Migrations.AddInitEssEvents do
     end
 
     create table(:vehicle_destroys, primary_key: false) do
-      add :character_id, :bigint, primary_key: true
-      add :timestamp, :integer, primary_key: true
-      add :attacker_character_id, :bigint, primary_key: true
+      add :character_id, :bigint
+      add :timestamp, :integer
+      add :attacker_character_id, :bigint
       add :attacker_loadout_id, :integer
       add :attacker_vehicle_id, :integer
       add :attacker_weapon_id, :integer
@@ -117,6 +117,14 @@ defmodule CAI.Repo.Migrations.AddInitEssEvents do
       add :zone_id, :integer
     end
 
+    # create indexes for char IDs on `gain_experiences` and `vehicle_destorys`, since they
+    # do not have composite primary keys (the frequency of these events + granularity of the
+    # timestamp field (seconds) would mean primary key conflicts).
+    create index(:vehicle_destroys, [:character_id])
+    create index(:gain_experiences, [:character_id])
+    create index(:vehicle_destroys, [:attacker_character_id])
+    create index(:gain_experiences, [:other_id])
+    
     # create indexes on the `:timestamp` for quick queries when building a session
     create index(:deaths, [:timestamp])
     create index(:gain_experiences, [:timestamp])

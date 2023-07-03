@@ -30,6 +30,12 @@ defmodule CAI.ESS.Client do
     heartbeat()
   end
 
+  # special case for random vehicles dying/despawning
+  @impl PS2.SocketClient
+  def handle_event({"VehicleDestroy", %{"character_id" => "0", "attacker_character_id" => "0"}}) do
+    :noop
+  end
+
   @supported_events Map.keys(@event_map)
   @impl PS2.SocketClient
   def handle_event({event_name, payload}) when event_name in @supported_events do
@@ -99,6 +105,8 @@ defmodule CAI.ESS.Client do
 
   @impl GenServer
   def handle_info(:restart_socket, _timer_ref) do
+    Logger.warning("No heartbeat received after #{@restart_socket_after}ms, restarting socket")
+
     Supervisor.restart_child(CAI.Supervisor, PS2.Socket)
     {:noreply, Process.send_after(self(), :restart_socket, @restart_socket_after)}
   end

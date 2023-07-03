@@ -83,7 +83,7 @@ defmodule CAI.Characters do
   def fetch(character_id) when is_integer(character_id) do
     with {:ok, %Character{} = char} <- Cachex.get(:character_cache, character_id),
          {:ok, true} <-
-           Cachex.put(:character_cache, char.name_first_lower, character_id, @put_opts) do
+           Cachex.put(:character_name_map, char.name_first_lower, character_id, @put_opts) do
       {:ok, char}
     else
       {:ok, nil} ->
@@ -118,45 +118,130 @@ defmodule CAI.Characters do
         :not_found
 
       {:error, %Changeset{} = changeset} ->
-        Logger.error(
-          "Could not parse census character response into a Character struct: #{inspect(changeset.errors)}"
-        )
+        Logger.error("Could not parse census character response into a Character struct: #{inspect(changeset.errors)}")
 
         :error
 
       {:error, e} ->
-        Logger.warning(
-          "CharacterCache query returned error (#{remaining_tries - 1} attempts remain): #{inspect(e)}"
-        )
+        Logger.warning("CharacterCache query returned error (#{remaining_tries - 1} attempts remain): #{inspect(e)}")
 
         fetch_by_query(query, remaining_tries - 1)
     end
   end
 
-  @default_session_count 10
   @doc """
-  TODO: Not finished implementing yet.
+  Get many characters.
 
-  Get a character's first `max_sessions` sessions.
+  Similar to `fetch/1`, except it takes many character IDs, and returns a map. The map is keyed by the given character
+  IDs, and the values will be the result of the query (see `fetch/1` return values).
 
-  Sessions are fetched in reverse chronological order (latest -> oldest). `max_sessions` defaults to
-  #{@default_session_count}.
+  TODO: refactor the hell out of this...
   """
-  @spec get_sessions(character_reference(), max_sessions :: integer()) ::
-          {:ok, [Session.t()]} | :not_found | :error
-  def get_sessions(character_ref, max_sessions) do
-    with {:ok, character_id, timestamp_pairs} <-
-           get_session_boundaries(character_ref, max_sessions) do
-      sessions =
-        Enum.map(timestamp_pairs, fn {login, logout} ->
-          {:ok, session} = Session.build(character_id, login, logout)
-          session
-        end)
+  @spec get_many(Enum.t()) :: %{character_id() => Character.t() | :not_found | :error}
+  def get_many(character_ids) do
+    for id when is_integer(id) <- character_ids, reduce: {[], %{}} do
+      {uncached_ids, character_map} ->
+        with {:ok, %Character{} = char} <- Cachex.get(:character_cache, id),
+             {:ok, true} <- Cachex.put(:character_name_map, char.name_first_lower, id, @put_opts) do
+          {uncached_ids, Map.put(character_map, char.character_id, char)}
+        else
+          {:ok, nil} ->
+            {[id | uncached_ids], Map.put(character_map, id, :not_found)}
 
-      {:ok, sessions}
+          {:error, _} ->
+            Logger.error("Could not access :character_cache")
+            {uncached_ids, character_map}
+        end
+    end
+    |> case do
+      {[], character_map} ->
+        character_map
+
+      {uncached_ids, character_map} ->
+        query = term(@query_base, "character_id", uncached_ids)
+
+        with {:ok, %QueryResult{data: data, returned: returned}} when returned > 0 <- Census.query(query, CAI.sid()) do
+          for params <- data, reduce: character_map do
+            char_map ->
+              case %Character{} |> Character.changeset(params) |> Changeset.apply_action(:update) do
+                {:ok, char} ->
+                  Cachex.put(:character_cache, char.character_id, char, @put_opts)
+                  Cachex.put(:character_name_map, char.name_first_lower, char.character_id, @put_opts)
+                  Map.put(char_map, char.character_id, char)
+
+                {:error, changeset} ->
+                  Logger.error(
+                    "Could not parse census character response into a Character struct: #{inspect(changeset.errors)}"
+                  )
+
+                  char_map
+              end
+          end
+        else
+          {:ok, %QueryResult{returned: 0}} ->
+            character_map
+
+          {:error, e} ->
+            Logger.warning("CharacterCache query returned error (not attempting to retry): #{inspect(e)}")
+
+            character_map
+        end
     end
   end
 
+  @doc """
+  Get an ordered list of all events in a session.
+
+  This function builds a session from the given character_id and login/logout timestamps, then iterates through its
+  embedded events, returning a list of all events sorted in reverse-chronological (descending) order.
+
+  If building a session fails (due to a changeset error), `{:error, changeset}` is returned instead.
+
+  This function serves to be used in the event feed in session LiveViews.
+
+  Since this is an expensive operation for longer game sessions, if `cache?` is `true` (which is the default), the
+  event history and session may be cached for faster access later. This argument should really only be `false` when the
+  session history could change (i.e. the character is online generating new events).
+
+  TODO: cache results
+  """
+  @spec get_session_history(
+          character_id(),
+          login :: integer(),
+          logout :: integer(),
+          cache? :: boolean()
+        ) :: [map()] | {:error, Ecto.Changeset.t()}
+  def get_session_history(character_id, login, logout, _cache? \\ true) do
+    with {:ok, session} <- Session.build(character_id, login, logout) do
+      [
+        :battle_rank_ups,
+        :deaths,
+        :gain_experiences,
+        :player_facility_captures,
+        :player_facility_defends,
+        :vehicle_destroys,
+        :login,
+        :logout
+      ]
+      |> Enum.reduce([], fn
+        # special case for `embeds_one` fields (which aren't a list)
+        field, event_list when field in [:login, :logout] ->
+          case Map.fetch(session, field) do
+            {:ok, nil} -> event_list
+            {:ok, event} -> [event | event_list]
+            _ -> event_list
+          end
+
+        field, acc ->
+          Enum.reduce(Map.fetch!(session, field), acc, fn event, event_list ->
+            [event | event_list]
+          end)
+      end)
+      |> Enum.sort_by(& &1.timestamp, :desc)
+    end
+  end
+
+  @default_session_count 10
   @spec get_session_boundaries(character_reference(), max_sessions :: integer()) ::
           {:ok, character_id, [{integer(), integer()}]} | :not_found | :error
   def get_session_boundaries(character_id, max_sessions \\ @default_session_count)
