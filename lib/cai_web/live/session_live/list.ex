@@ -21,6 +21,7 @@ defmodule CAIWeb.SessionLive.List do
         socket
         |> stream(:sessions, timestamps)
         |> assign(:character, character)
+        |> assign(:page_title, "#{character.name_first}'s Session List")
       }
     end
   end

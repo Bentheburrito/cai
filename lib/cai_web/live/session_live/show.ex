@@ -85,14 +85,12 @@ defmodule CAIWeb.SessionLive.Show do
 
   # Make "Load More" button presses synchronous
   def handle_event("load-more-events", _params, %{assigns: %{loading_more?: true}} = socket) do
-    IO.inspect("NOPE")
     {:noreply, socket}
   end
 
   # Stream some more events (if there are any) when "Load More" is clicked
   @impl true
   def handle_event("load-more-events", _params, socket) do
-    IO.inspect(socket.assigns.loading_more?)
     new_events_limit = Map.get(socket.assigns, :events_limit, @events_limit) + @events_limit
 
     case Enum.split(socket.assigns.remaining_events, @events_limit) do
@@ -118,8 +116,6 @@ defmodule CAIWeb.SessionLive.Show do
   # Historic Session - bulk insert the given event tuples
   @impl true
   def handle_info({:bulk_append, event_tuples, new_events_limit}, socket) do
-    IO.inspect("setting loading more? to false")
-
     {
       :noreply,
       socket
