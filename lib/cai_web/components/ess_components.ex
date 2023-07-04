@@ -49,16 +49,12 @@ defmodule CAIWeb.ESSComponents do
 
   def build_event_log_item(assigns, %BattleRankUp{}, _c_id) do
     ~H"""
-    <%= link_character(@character) %> ranked up to <%= @event.battle_rank %>
+    <%= link_character(@character) %> ranked up to Battle Rank <%= @event.battle_rank %>
     """
   end
 
   # Suicide
-  def build_event_log_item(
-        assigns,
-        %Death{character_id: char_id, attacker_character_id: char_id},
-        _c_id
-      ) do
+  def build_event_log_item(assigns, %Death{character_id: char_id, attacker_character_id: char_id}, _c_id) do
     ~H"""
     <%= link_character(@character) %> died of their own accord with <%= get_weapon_name(
       @event.attacker_weapon_id,
@@ -172,11 +168,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Kill assist
-  def build_event_log_item(
-        assigns,
-        %GainExperience{experience_id: id, character_id: char_id},
-        char_id
-      )
+  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
       when is_assist_xp(id) do
     ~H"""
     <%= link_character(@character) %> assisted in killing <%= link_character(@other) %>
@@ -184,11 +176,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Got revived by someone
-  def build_event_log_item(
-        assigns,
-        %GainExperience{experience_id: id, other_id: char_id},
-        char_id
-      )
+  def build_event_log_item(assigns, %GainExperience{experience_id: id, other_id: char_id}, char_id)
       when is_revive_xp(id) do
     ~H"""
     <%= link_character(@other) %> revived <%= link_character(@character) %>
@@ -196,11 +184,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Revived someone
-  def build_event_log_item(
-        assigns,
-        %GainExperience{experience_id: id, character_id: char_id},
-        char_id
-      )
+  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
       when is_revive_xp(id) do
     ~H"""
     <%= link_character(@character) %> revived <%= link_character(@other) %>
@@ -208,11 +192,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Gunner gets a kill
-  def build_event_log_item(
-        assigns,
-        %GainExperience{experience_id: id, character_id: char_id},
-        char_id
-      )
+  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
       when is_gunner_assist_xp(id) do
     %{"description" => desc} = CAI.xp()[id]
     desc_downcase = String.downcase(desc)

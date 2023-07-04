@@ -8,10 +8,13 @@ defmodule CAI.Repo.Migrations.AddInitEssEvents do
       add :attacker_character_id, :bigint, primary_key: true
       add :attacker_fire_mode_id, :integer
       add :attacker_loadout_id, :integer
+      add :attacker_team_id, :integer
       add :attacker_vehicle_id, :integer
       add :attacker_weapon_id, :integer
       add :character_loadout_id, :integer
+      add :is_critical, :boolean
       add :is_headshot, :boolean
+      add :team_id, :integer
       add :world_id, :integer
       add :zone_id, :integer
     end
@@ -22,6 +25,7 @@ defmodule CAI.Repo.Migrations.AddInitEssEvents do
       add :experience_id, :integer
       add :loadout_id, :integer
       add :other_id, :bigint
+      add :team_id, :integer
       add :timestamp, :integer
       add :world_id, :integer
       add :zone_id, :integer
@@ -32,10 +36,12 @@ defmodule CAI.Repo.Migrations.AddInitEssEvents do
       add :timestamp, :integer
       add :attacker_character_id, :bigint
       add :attacker_loadout_id, :integer
+      add :attacker_team_id, :integer
       add :attacker_vehicle_id, :integer
       add :attacker_weapon_id, :integer
       add :facility_id, :integer
       add :faction_id, :integer
+      add :team_id, :integer
       add :vehicle_id, :integer
       add :world_id, :integer
       add :zone_id, :integer
@@ -124,7 +130,7 @@ defmodule CAI.Repo.Migrations.AddInitEssEvents do
     create index(:gain_experiences, [:character_id])
     create index(:vehicle_destroys, [:attacker_character_id])
     create index(:gain_experiences, [:other_id])
-    
+
     # create indexes on the `:timestamp` for quick queries when building a session
     create index(:deaths, [:timestamp])
     create index(:gain_experiences, [:timestamp])

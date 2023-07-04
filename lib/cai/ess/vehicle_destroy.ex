@@ -13,10 +13,12 @@ defmodule CAI.ESS.VehicleDestroy do
     field :timestamp, :integer, primary_key: true
     field :attacker_character_id, :integer, primary_key: true
     field :attacker_loadout_id, :integer
+    field :attacker_team_id, :integer
     field :attacker_vehicle_id, :integer
     field :attacker_weapon_id, :integer
     field :facility_id, :integer
     field :faction_id, :integer
+    field :team_id, :integer
     field :vehicle_id, :integer
     field :world_id, :integer
     field :zone_id, :integer

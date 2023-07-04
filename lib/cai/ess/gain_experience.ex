@@ -14,6 +14,7 @@ defmodule CAI.ESS.GainExperience do
     field :experience_id, :integer
     field :loadout_id, :integer
     field :other_id, :integer
+    field :team_id, :integer
     field :timestamp, :integer
     field :world_id, :integer
     field :zone_id, :integer

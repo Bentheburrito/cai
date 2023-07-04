@@ -14,10 +14,13 @@ defmodule CAI.ESS.Death do
     field :attacker_character_id, :integer, primary_key: true
     field :attacker_fire_mode_id, :integer
     field :attacker_loadout_id, :integer
+    field :attacker_team_id, :integer
     field :attacker_vehicle_id, :integer
     field :attacker_weapon_id, :integer
     field :character_loadout_id, :integer
+    field :is_critical, :boolean
     field :is_headshot, :boolean
+    field :team_id, :integer
     field :world_id, :integer
     field :zone_id, :integer
   end
