@@ -5,7 +5,8 @@ defmodule CAIWeb.ESSComponents do
     endpoint: CAIWeb.Endpoint,
     router: CAIWeb.Router
 
-  import CAI, only: [is_revive_xp: 1, is_assist_xp: 1, is_gunner_assist_xp: 1]
+  import CAI, only: [is_character_id: 1, is_revive_xp: 1, is_assist_xp: 1, is_gunner_assist_xp: 1]
+  import CAIWeb.CoreComponents, only: [hover_timestamp: 1]
 
   alias CAI.Characters.Character
 
@@ -22,26 +23,6 @@ defmodule CAIWeb.ESSComponents do
 
   require Logger
 
-  def hook_timestamp(:loading), do: "Loading..."
-  def hook_timestamp(nil), do: ""
-  def hook_timestamp(:current_session), do: "Current Session"
-
-  def hook_timestamp(timestamp) do
-    timestamp
-    # dt_string =
-    #   timestamp
-    #   |> DateTime.from_unix!()
-    #   |> to_string()
-
-    # id = :rand.uniform(999_999_999)
-
-    # assigns = []
-
-    # ~H"""
-    # <span class="date-time" id={"formatted-timestamp-#{id}"} phx-hook="NewDateToFormat"><%= dt_string %></span>
-    # """
-  end
-
   attr(:event, :map)
   attr(:character, :map)
   attr(:other, :map)
@@ -54,11 +35,12 @@ defmodule CAIWeb.ESSComponents do
         id={@id}
         phx-mounted={
           Phoenix.LiveView.JS.transition(
-            "animate-fade rounded-l p-1",
+            "animate-fade rounded-l pl-1",
             time: 1000
           )
         }
       >
+        <.hover_timestamp id={"#{@id}-timestamp"} unix_timestamp={@event.timestamp} />
         <%= log %>
       </div>
     <% end %>
@@ -67,9 +49,7 @@ defmodule CAIWeb.ESSComponents do
 
   def build_event_log_item(assigns, %BattleRankUp{}, _c_id) do
     ~H"""
-    <%= link_character(@character) %> ranked up to <%= @event.battle_rank %> - <%= hook_timestamp(
-      @event.timestamp
-    ) %>
+    <%= link_character(@character) %> ranked up to <%= @event.battle_rank %>
     """
   end
 
@@ -83,18 +63,16 @@ defmodule CAIWeb.ESSComponents do
     <%= link_character(@character) %> died of their own accord with <%= get_weapon_name(
       @event.attacker_weapon_id,
       @event.attacker_vehicle_id
-    ) %> - <%= hook_timestamp(@event.timestamp) %>
+    ) %>
     """
   end
 
   def build_event_log_item(assigns, %Death{}, _c_id) do
     ~H"""
-    <%= link_character(
-      if @character.character_id == @event.character_id, do: @other, else: @character
-    ) %> killed <%= link_character(
+    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %> killed <%= link_character(
       if @character.character_id == @event.character_id, do: @character, else: @other
     ) %> with <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
-    <%= (@event.is_headshot && "(headshot)") || "" %> - <%= hook_timestamp(@event.timestamp) %>
+    <%= (@event.is_headshot && "(headshot)") || "" %>
     """
   end
 
@@ -129,7 +107,7 @@ defmodule CAIWeb.ESSComponents do
 
     ~H"""
     <%= link_character(@character) %> captured <%= "#{@facility["facility_name"] || "a facility"} #{@facility_type}" %>
-    <%= @capturing_outfit %> - <%= hook_timestamp(@event.timestamp) %>
+    <%= @capturing_outfit %>
     """
   end
 
@@ -162,7 +140,7 @@ defmodule CAIWeb.ESSComponents do
 
     ~H"""
     <%= link_character(@character) %> defended <%= "#{@facility["facility_name"] || "a facility"} #{@facility_type}" %>
-    <%= @capturing_outfit %> - <%= hook_timestamp(@event.timestamp) %>
+    <%= @capturing_outfit %>
     """
   end
 
@@ -175,26 +153,21 @@ defmodule CAIWeb.ESSComponents do
     ~H"""
     <%= link_character(@character) %> destroyed their <%= CAI.vehicles()[
       @event.vehicle_id
-    ]["name"] %> with <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %> - <%= hook_timestamp(
-      @event.timestamp
-    ) %>
+    ]["name"] %> with <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
     """
   end
 
   def build_event_log_item(assigns, %VehicleDestroy{}, _c_id) do
     ~H"""
-    <%= link_character(
-      if @character.character_id == @event.character_id, do: @other, else: @character
-    ) %> destroyed <%= link_character(
-      if @character.character_id == @event.character_id, do: @character, else: @other
-    ) %>'s <%= CAI.vehicles()[@event.vehicle_id]["name"] %> with <%= get_weapon_name(
+    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %> destroyed <%= link_character(
+      (@character.character_id == @event.character_id && @character) || @other,
+      true
+    ) %> <%= CAI.vehicles()[@event.vehicle_id]["name"] %> with <%= get_weapon_name(
       @event.attacker_weapon_id,
       @event.attacker_vehicle_id
     ) %>
     <%= (@event.attacker_vehicle_id != 0 &&
-           " while in a #{CAI.vehicles()[@event.attacker_vehicle_id]["name"]}") || "" %> - <%= hook_timestamp(
-      @event.timestamp
-    ) %>
+           " while in a #{CAI.vehicles()[@event.attacker_vehicle_id]["name"]}") || "" %>
     """
   end
 
@@ -206,9 +179,7 @@ defmodule CAIWeb.ESSComponents do
       )
       when is_assist_xp(id) do
     ~H"""
-    <%= link_character(@character) %> assisted in killing <%= link_character(@other) %> - <%= hook_timestamp(
-      @event.timestamp
-    ) %>
+    <%= link_character(@character) %> assisted in killing <%= link_character(@other) %>
     """
   end
 
@@ -220,9 +191,7 @@ defmodule CAIWeb.ESSComponents do
       )
       when is_revive_xp(id) do
     ~H"""
-    <%= link_character(@other) %> revived <%= link_character(@character) %> - <%= hook_timestamp(
-      @event.timestamp
-    ) %>
+    <%= link_character(@other) %> revived <%= link_character(@character) %>
     """
   end
 
@@ -234,9 +203,7 @@ defmodule CAIWeb.ESSComponents do
       )
       when is_revive_xp(id) do
     ~H"""
-    <%= link_character(@character) %> revived <%= link_character(@other) %> - <%= hook_timestamp(
-      @event.timestamp
-    ) %>
+    <%= link_character(@character) %> revived <%= link_character(@other) %>
     """
   end
 
@@ -263,9 +230,7 @@ defmodule CAIWeb.ESSComponents do
           }
 
         _ ->
-          Logger.warning(
-            "Could not parse gunner assist xp for event log message: #{inspect(desc)}"
-          )
+          Logger.warning("Could not parse gunner assist xp for event log message: #{inspect(desc)}")
 
           %{}
       end
@@ -275,15 +240,12 @@ defmodule CAIWeb.ESSComponents do
     ~H"""
     <%= cond do %>
       <% @vehicle_killed -> %>
-        <%= link_character(@character) %>'s <%= @vehicle_killer %> gunner destroyed a <%= @vehicle_killed %>
+        <%= link_character(@character, true) %> <%= @vehicle_killer %> gunner destroyed a <%= @vehicle_killed %>
       <% @vehicle_killer -> %>
-        <%= link_character(@character) %>'s <%= @vehicle_killer %> gunner killed <%= link_character(
-          @other
-        ) %>
+        <%= link_character(@character, true) %> <%= @vehicle_killer %> gunner killed <%= link_character(@other) %>
       <% :else -> %>
         <%= @desc_downcase %>
     <% end %>
-    - <%= hook_timestamp(@event.timestamp) %>
     """
   end
 
@@ -301,19 +263,31 @@ defmodule CAIWeb.ESSComponents do
 
   def build_event_log_item(_, _, _), do: ""
 
-  defp link_character({:unavailable, character_id}) do
-    assigns = %{character_id: character_id}
+  defp link_character(maybe_character, possessive? \\ false)
+
+  defp link_character({:unavailable, character_id}, possessive?) when is_character_id(character_id) do
+    assigns = %{character_id: character_id, possessive: (possessive? && "'s") || ""}
 
     ~H"""
-    <a patch={~p"/sessions/#{@character_id}"}>[Character Name Unavailable]</a>
+    <.link patch={~p"/sessions/#{@character_id}"} class="hover:text-zinc-500">[Name Unavailable]<%= @possessive %></.link>
     """
   end
 
-  defp link_character(%Character{name_first: name, character_id: id}) do
-    assigns = %{name: name, id: id}
+  defp link_character({:unavailable, npc_id}, _) do
+    assigns = %{}
+
+    if npc_id == 0 do
+      ~H""
+    else
+      ~H"a vehicle"
+    end
+  end
+
+  defp link_character(%Character{name_first: name, character_id: id}, possessive?) do
+    assigns = %{name: name, id: id, possessive: (possessive? && "'s") || ""}
 
     ~H"""
-    <.link patch={~p"/sessions/#{@id}"} class="hover:text-zinc-500"><%= @name %></.link>
+    <.link patch={~p"/sessions/#{@id}"} class="hover:text-zinc-500"><%= @name <> @possessive %></.link>
     """
   end
 

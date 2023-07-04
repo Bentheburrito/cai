@@ -107,6 +107,7 @@ defmodule CAI.ESS.Client do
   def handle_info(:restart_socket, _timer_ref) do
     Logger.warning("No heartbeat received after #{@restart_socket_after}ms, restarting socket")
 
+    Supervisor.terminate_child(CAI.Supervisor, PS2.Socket)
     Supervisor.restart_child(CAI.Supervisor, PS2.Socket)
     {:noreply, Process.send_after(self(), :restart_socket, @restart_socket_after)}
   end

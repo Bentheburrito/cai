@@ -4,6 +4,7 @@ defmodule CAI.Characters do
   sessions. Manages caches and retries automatically.
   """
 
+  import CAI, only: [is_character_id: 1]
   import Ecto.Query, warn: false
   import PS2.API.QueryBuilder, except: [field: 2]
 
@@ -11,7 +12,7 @@ defmodule CAI.Characters do
   alias CAI.Repo
   alias CAI.Characters.{Character, Session}
   alias PS2.API, as: Census
-  alias PS2.API.{Join, Query, QueryResult}
+  alias PS2.API.{Query, QueryResult}
 
   alias CAI.ESS.{
     Death,
@@ -36,21 +37,22 @@ defmodule CAI.Characters do
   @query_base Query.new(collection: "character")
               |> resolve([
                 "outfit(alias,id,name,leader_character_id,time_created_date)",
-                "profile(profile_type_description)",
-                "stat_history(stat_name,all_time)",
-                "stat(stat_name,value_forever)",
-                "stat_by_faction(stat_name,value_forever_vs,value_forever_nc,value_forever_tr)"
+                "profile(profile_type_description)"
+                # Leaving these out for now until needed later, and a shallow query is added
+                # "stat_history(stat_name,all_time)",
+                # "stat(stat_name,value_forever)",
+                # "stat_by_faction(stat_name,value_forever_vs,value_forever_nc,value_forever_tr)"
               ])
-              |> join(
-                Join.new(collection: "characters_weapon_stat")
-                |> inject_at("weapon_stat")
-                |> list(true)
-              )
-              |> join(
-                Join.new(collection: "characters_weapon_stat_by_faction")
-                |> inject_at("weapon_stat_by_faction")
-                |> list(true)
-              )
+              # |> join(
+              #   Join.new(collection: "characters_weapon_stat")
+              #   |> inject_at("weapon_stat")
+              #   |> list(true)
+              # )
+              # |> join(
+              #   Join.new(collection: "characters_weapon_stat_by_faction")
+              #   |> inject_at("weapon_stat_by_faction")
+              #   |> list(true)
+              # )
               |> lang("en")
 
   @doc """
@@ -80,7 +82,7 @@ defmodule CAI.Characters do
     end
   end
 
-  def fetch(character_id) when is_integer(character_id) do
+  def fetch(character_id) when is_character_id(character_id) do
     with {:ok, %Character{} = char} <- Cachex.get(:character_cache, character_id),
          {:ok, true} <-
            Cachex.put(:character_name_map, char.name_first_lower, character_id, @put_opts) do
@@ -94,6 +96,11 @@ defmodule CAI.Characters do
         Logger.error("Could not access :character_cache")
         :error
     end
+  end
+
+  def fetch(non_character_id) do
+    Logger.warning("Characters.fetch/1 called with non-character ID: #{inspect(non_character_id)}")
+    :error
   end
 
   @doc """
@@ -136,23 +143,26 @@ defmodule CAI.Characters do
 
   Similar to `fetch/1`, except it takes many character IDs, and returns a map. The map is keyed by the given character
   IDs, and the values will be the result of the query (see `fetch/1` return values).
+
+  Non-character IDs in the given list are ignored.
   """
   @spec get_many(Enum.t()) :: %{character_id() => Character.t() | :not_found | :error}
   def get_many(character_ids) do
     # Step 1: Check the cache for these IDs, keeping track of IDs that are not in the cache.
-    Enum.reduce(character_ids, {[], %{}}, fn id, {uncached_ids, character_map} when is_integer(id) and id != 0 ->
-      case Cachex.get(:character_cache, id) do
-        {:ok, %Character{} = char} ->
-          {uncached_ids, Map.put(character_map, char.character_id, char)}
+    for id when is_character_id(id) <- character_ids, reduce: {[], %{}} do
+      {uncached_ids, character_map} ->
+        case Cachex.get(:character_cache, id) do
+          {:ok, %Character{} = char} ->
+            {uncached_ids, Map.put(character_map, char.character_id, char)}
 
-        {:ok, nil} ->
-          {[id | uncached_ids], Map.put(character_map, id, :not_found)}
+          {:ok, nil} ->
+            {[id | uncached_ids], Map.put(character_map, id, :not_found)}
 
-        {:error, _} ->
-          Logger.error("Could not access :character_cache")
-          {uncached_ids, character_map}
-      end
-    end)
+          {:error, _} ->
+            Logger.error("Could not access :character_cache")
+            {uncached_ids, character_map}
+        end
+    end
     # Step 2: If there are uncached_ids, query Census for them
     |> case do
       {[], character_map} ->
@@ -286,7 +296,7 @@ defmodule CAI.Characters do
     end
   end
 
-  def get_session_boundaries(character_id, max_sessions) when is_integer(character_id) do
+  def get_session_boundaries(character_id, max_sessions) when is_character_id(character_id) do
     case list_all_timestamps(character_id) do
       [_first_pair | _rest] = timestamp_event_type_pairs ->
         get_session_boundaries(character_id, timestamp_event_type_pairs, max_sessions)

@@ -22,13 +22,24 @@
       :if={is_list(assigns[:remaining_events]) and not match?([], assigns[:remaining_events])}
       class="flex justify-center"
     >
-      <.button
-        id="load-more-button"
-        phx-click="load-more-events"
-        class="absolute mx-auto border-solid border-2 border-gray-400"
-      >
-        Load More
-      </.button>
+      <%= if @loading_more? do %>
+        <.button
+          id="load-more-button"
+          phx-click="load-more-events"
+          class="absolute mx-auto border-solid border-2 border-gray-400 hover:bg-zinc-900 text-gray-400 active:text-gray-400"
+          disabled
+        >
+          Loading...
+        </.button>
+      <% else %>
+        <.button
+          id="load-more-button"
+          phx-click="load-more-events"
+          class="absolute mx-auto border-solid border-2 border-gray-400"
+        >
+          Load More
+        </.button>
+      <% end %>
     </span>
   </div>
 

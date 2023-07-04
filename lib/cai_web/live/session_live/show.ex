@@ -23,6 +23,7 @@ defmodule CAIWeb.SessionLive.Show do
       :ok,
       socket
       |> assign(:live?, false)
+      |> assign(:loading_more?, false)
       |> stream_configure(:events, dom_id: &event_to_dom_id/1)
     }
   end
@@ -40,17 +41,18 @@ defmodule CAIWeb.SessionLive.Show do
          {:ok, event_history} <- get_session_history(character.character_id, login, logout, socket) do
       {init_events, remaining_events} = Enum.split(event_history, @events_limit)
 
-      init_event_tuples = map_events_to_tuples(init_events, character)
+      bulk_append(init_events, character, @events_limit)
 
       {
         :noreply,
         socket
-        |> stream(:events, init_event_tuples, reset: true, at: @append, limit: @events_limit)
+        |> stream(:events, [], reset: true, at: @append, limit: @events_limit)
         |> assign(:remaining_events, remaining_events)
         |> assign(:page_title, "#{character.name_first}'s Previous Session")
         |> assign(:bounds, {login, logout})
         |> assign(:character, character)
         |> assign(:live?, false)
+        |> assign(:loading_more?, true)
       }
     end
   end
@@ -81,9 +83,16 @@ defmodule CAIWeb.SessionLive.Show do
 
   ### HANDLE EVENTS AND MESSAGES ###
 
+  # Make "Load More" button presses synchronous
+  def handle_event("load-more-events", _params, %{assigns: %{loading_more?: true}} = socket) do
+    IO.inspect("NOPE")
+    {:noreply, socket}
+  end
+
   # Stream some more events (if there are any) when "Load More" is clicked
   @impl true
   def handle_event("load-more-events", _params, socket) do
+    IO.inspect(socket.assigns.loading_more?)
     new_events_limit = Map.get(socket.assigns, :events_limit, @events_limit) + @events_limit
 
     case Enum.split(socket.assigns.remaining_events, @events_limit) do
@@ -91,16 +100,33 @@ defmodule CAIWeb.SessionLive.Show do
         {:noreply, assign(socket, :remaining_events, [])}
 
       {events_to_stream, remaining_events} ->
-        event_tuples = map_events_to_tuples(events_to_stream, socket.assigns.character)
-
-        {
-          :noreply,
-          socket
-          |> stream(:events, event_tuples, at: @append, limit: new_events_limit)
-          |> assign(:events_limit, new_events_limit)
-          |> assign(:remaining_events, remaining_events)
-        }
+        # event_tuples = map_events_to_tuples(events_to_stream, socket.assigns.character)
+        bulk_append(events_to_stream, socket.assigns.character, new_events_limit)
+        {:noreply, socket |> assign(:remaining_events, remaining_events) |> assign(:loading_more?, true)}
     end
+  end
+
+  defp bulk_append(events_to_stream, character, new_events_limit) do
+    liveview = self()
+
+    Task.start_link(fn ->
+      tuples = map_events_to_tuples(events_to_stream, character)
+      send(liveview, {:bulk_append, tuples, new_events_limit})
+    end)
+  end
+
+  # Historic Session - bulk insert the given event tuples
+  @impl true
+  def handle_info({:bulk_append, event_tuples, new_events_limit}, socket) do
+    IO.inspect("setting loading more? to false")
+
+    {
+      :noreply,
+      socket
+      |> stream(:events, event_tuples, at: @append, limit: new_events_limit)
+      |> assign(:events_limit, new_events_limit)
+      |> assign(:loading_more?, false)
+    }
   end
 
   # Live Session - receive a new event via PubSub
@@ -173,7 +199,7 @@ defmodule CAIWeb.SessionLive.Show do
         {:unavailable, other_id}
 
       {reason, other_id} ->
-        if other_id != 0 do
+        if CAI.character_id?(other_id) do
           Logger.warning("Couldn't fetch other character (ID #{inspect(other_id)}) for an event: #{inspect(reason)}")
         end
 

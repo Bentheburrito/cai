@@ -22,11 +22,11 @@ import { Socket } from "phoenix"
 import { LiveSocket } from "phoenix_live_view"
 import topbar from "../vendor/topbar"
 
-const formatTimestamp = context => {
+const extractDateTime = element => {
   // The inner HTML should be a unix timestamp.
-  const timestamp = parseInt(context.el.innerHTML);
+  const timestamp = parseInt(element.innerHTML);
   if (!timestamp) {
-    console.error(`formatTimestamp: element's inner HTML is not an int: ${context.el.innerHTML}`);
+    console.error(`formatTimestamp: element's inner HTML is not an int: ${element.innerHTML}`);
     return;
   }
 
@@ -37,7 +37,22 @@ const formatTimestamp = context => {
     return;
   }
 
+  return dateTimeObject;
+}
+
+const formatTimestamp = context => {
+  const dateTimeObject = extractDateTime(context.el);
+  if (!dateTimeObject) return;
+
   context.el.innerHTML = `${dateTimeObject.toLocaleDateString()} @ ${dateTimeObject.toLocaleTimeString()}`;
+}
+
+const hoverFormatTimestamp = context => {
+  const dateTimeObject = extractDateTime(context.el);
+  if (!dateTimeObject) return;
+
+  context.el.innerHTML = dateTimeObject.toLocaleTimeString({}, { hour12: false });
+  context.el.setAttribute("title", `${dateTimeObject.toLocaleDateString()} @ ${dateTimeObject.toLocaleTimeString()}`);
 }
 
 const Hooks = {
@@ -48,6 +63,14 @@ const Hooks = {
     },
     updated () {
       formatTimestamp(this);
+    }
+  },
+  HoverFormatTimestamp: {
+    mounted () {
+      hoverFormatTimestamp(this);
+    },
+    updated () {
+      hoverFormatTimestamp(this);
     }
   }
 };
