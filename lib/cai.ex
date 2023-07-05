@@ -36,7 +36,9 @@ defmodule CAI do
       not String.contains?(desc, ["hive xp", "squad member"])
   end
 
-  @gunner_assist_xp @xp |> Stream.filter(gunner_assist_xp_filter) |> Enum.map(fn {id, _} -> id end)
+  @gunner_assist_xp @xp
+                    |> Stream.filter(gunner_assist_xp_filter)
+                    |> Enum.map(fn {id, _} -> id end)
   defguard is_gunner_assist_xp(id) when id in @gunner_assist_xp
 
   @revive_xp_ids [7, 53]

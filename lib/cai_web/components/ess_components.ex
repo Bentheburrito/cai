@@ -26,7 +26,7 @@ defmodule CAIWeb.ESSComponents do
   attr(:event, :map)
   attr(:character, :map)
   attr(:other, :map)
-  attr :id, :string
+  attr(:id, :string)
 
   def event_item(assigns) do
     ~H"""
@@ -54,7 +54,11 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Suicide
-  def build_event_log_item(assigns, %Death{character_id: char_id, attacker_character_id: char_id}, _c_id) do
+  def build_event_log_item(
+        assigns,
+        %Death{character_id: char_id, attacker_character_id: char_id},
+        _c_id
+      ) do
     ~H"""
     <%= link_character(@character) %> died of their own accord with <%= get_weapon_name(
       @event.attacker_weapon_id,
@@ -168,7 +172,11 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Kill assist
-  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
+  def build_event_log_item(
+        assigns,
+        %GainExperience{experience_id: id, character_id: char_id},
+        char_id
+      )
       when is_assist_xp(id) do
     ~H"""
     <%= link_character(@character) %> assisted in killing <%= link_character(@other) %>
@@ -176,7 +184,11 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Got revived by someone
-  def build_event_log_item(assigns, %GainExperience{experience_id: id, other_id: char_id}, char_id)
+  def build_event_log_item(
+        assigns,
+        %GainExperience{experience_id: id, other_id: char_id},
+        char_id
+      )
       when is_revive_xp(id) do
     ~H"""
     <%= link_character(@other) %> revived <%= link_character(@character) %>
@@ -184,7 +196,11 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Revived someone
-  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
+  def build_event_log_item(
+        assigns,
+        %GainExperience{experience_id: id, character_id: char_id},
+        char_id
+      )
       when is_revive_xp(id) do
     ~H"""
     <%= link_character(@character) %> revived <%= link_character(@other) %>
@@ -192,7 +208,11 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Gunner gets a kill
-  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
+  def build_event_log_item(
+        assigns,
+        %GainExperience{experience_id: id, character_id: char_id},
+        char_id
+      )
       when is_gunner_assist_xp(id) do
     %{"description" => desc} = CAI.xp()[id]
     desc_downcase = String.downcase(desc)
@@ -210,7 +230,9 @@ defmodule CAIWeb.ESSComponents do
           }
 
         _ ->
-          Logger.warning("Could not parse gunner assist xp for event log message: #{inspect(desc)}")
+          Logger.warning(
+            "Could not parse gunner assist xp for event log message: #{inspect(desc)}"
+          )
 
           %{}
       end
@@ -245,7 +267,8 @@ defmodule CAIWeb.ESSComponents do
 
   defp link_character(maybe_character, possessive? \\ false)
 
-  defp link_character({:unavailable, character_id}, possessive?) when is_character_id(character_id) do
+  defp link_character({:unavailable, character_id}, possessive?)
+       when is_character_id(character_id) do
     assigns = %{character_id: character_id, possessive: (possessive? && "'s") || ""}
 
     ~H"""
@@ -263,11 +286,30 @@ defmodule CAIWeb.ESSComponents do
     end
   end
 
-  defp link_character(%Character{name_first: name, character_id: id}, possessive?) do
-    assigns = %{name: name, id: id, possessive: (possessive? && "'s") || ""}
+  defp link_character(
+         %Character{name_first: name, character_id: id, faction_id: faction_id},
+         possessive?
+       ) do
+    assigns = %{
+      name: name,
+      id: id,
+      possessive: (possessive? && "'s") || "",
+      # Can't actually store these classes in `CAI.factions` because these classes won't be compiled...
+      faction_classes:
+        case CAI.factions()[faction_id].alias do
+          "NS" -> "bg-gray-600 hover:bg-gray-800"
+          "VS" -> "bg-purple-600 hover:bg-purple-800"
+          "NC" -> "bg-blue-600 hover:bg-blue-800"
+          "TR" -> "bg-red-500 hover:bg-red-800"
+          "NSO" -> "bg-gray-600 hover:bg-gray-800"
+          _ -> "bg-gray-600 hover:bg-gray-800"
+        end
+    }
 
     ~H"""
-    <.link patch={~p"/sessions/#{@id}"} class="hover:text-zinc-500"><%= @name <> @possessive %></.link>
+    <.link patch={~p"/sessions/#{@id}"} class={"rounded pl-1 pr-1 mr-1 #{@faction_classes}"}>
+      <%= @name <> @possessive %>
+    </.link>
     """
   end
 
