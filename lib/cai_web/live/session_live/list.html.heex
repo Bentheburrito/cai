@@ -1,4 +1,4 @@
-<.character_header :if={assigns[:character]} character={@character}/>
+<.character_header character={assigns[:character]} />
 
 <div :if={assigns[:streams][:sessions]}>
   <h3 class="m-2">
@@ -6,16 +6,13 @@
   </h3>
   <div id="session-list" phx-update="stream">
     <div :for={{dom_id, {login, logout}} <- @streams.sessions} id={dom_id}>
-      <.button 
-        class="border-solid border-2 m-1 rounded-2xl border-gray-400" 
+      <.button
+        class="border-solid border-2 m-1 rounded-2xl border-gray-400"
         phx-click={JS.navigate(~p"/sessions/#{@character.character_id}/show?login=#{login}&logout=#{logout}")}
       >
         Duration: <span><%= format_duration(login, logout) %></span>
-        <br>
-        Began at 
-        <.timestamp id={"#{dom_id}-login"} unix_timestamp={login}/> 
-        | ended at 
-        <.timestamp id={"#{dom_id}-logout"} unix_timestamp={logout}/>
+        <br /> Began at <.timestamp id={"#{dom_id}-login"} unix_timestamp={login} /> | ended at
+        <.timestamp id={"#{dom_id}-logout"} unix_timestamp={logout} />
       </.button>
     </div>
   </div>

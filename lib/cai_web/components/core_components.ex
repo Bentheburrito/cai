@@ -613,6 +613,23 @@ defmodule CAIWeb.CoreComponents do
   """
   attr(:character, :map, required: true)
 
+  def character_header(%{character: nil} = assigns) do
+    ~H"""
+    <.header>
+      Character not found! Make sure you spelled their name/ID correctly. <br />
+      <:subtitle>
+        <div>
+          If you're sure everything is correct, either:
+          <ul class="list-disc list-inside">
+            <li>the Census API is unavailable, or</li>
+            <li>this character has been deleted</li>
+          </ul>
+        </div>
+      </:subtitle>
+    </.header>
+    """
+  end
+
   def character_header(assigns) do
     ~H"""
     <.header>
