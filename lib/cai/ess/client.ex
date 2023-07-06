@@ -1,4 +1,9 @@
 defmodule CAI.ESS.Client do
+  @moduledoc """
+  Consumes ESS events.
+
+  TODO: If X amount of Repo.insert!s fail within Y seconds, *unsubscribe*, and resubscribe. See ~NOTE~ below
+  """
   @behaviour PS2.SocketClient
 
   use GenServer
@@ -59,6 +64,8 @@ defmodule CAI.ESS.Client do
 
         PubSub.broadcast(CAI.PubSub, "ess:#{event_name}", {:event, event})
 
+        # ~NOTE~: convert to unbanged insert, wrap in function that will send an event to this gen server if the insert
+        # failed, then the gen server keep track of the X fails in Y seconds described in the moduledoc.
         CAI.Repo.insert!(event)
 
       {:error, reason} ->
