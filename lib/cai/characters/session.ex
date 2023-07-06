@@ -8,7 +8,7 @@ defmodule CAI.Characters.Session do
   ESS, there is no guarantee the socket will receive all (or any) of the login/logout events. Therefore, a session can
   also be defined as a group of events with a #{@session_timeout_mins} minute period of inactivity before the first
   event, and after the last event. We only consider the most frequent events to gauge activity: PlayerLogin,
-  GainExperience, and Deaths.
+  GainExperience, and Death.
   """
   use Ecto.Schema
   import Ecto.Changeset
@@ -112,17 +112,14 @@ defmodule CAI.Characters.Session do
     where_clause =
       case module do
         GainExperience ->
-          revive_xp_ids = CAI.revive_xp_ids()
-
           dynamic(
             [e],
             (field(e, :character_id) == ^character_id or
-               (field(e, :other_id) == ^character_id and
-                  field(e, :experience_id) in ^revive_xp_ids)) and
+               field(e, :other_id) == ^character_id) and
               (field(e, :timestamp) >= ^login and field(e, :timestamp) <= ^logout)
           )
 
-        mod when mod in [Deaths, VehicleDestroy] ->
+        mod when mod in [Death, VehicleDestroy] ->
           dynamic(
             [e],
             (field(e, :character_id) == ^character_id or

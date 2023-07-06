@@ -89,8 +89,8 @@ defmodule CAIWeb.ESSComponents do
     # can't do this right now, need outfit ID from FacilityControl events (the one provided here is just the player's
     # current outfit :/)
     capturing_outfit = "[outfit unknown]"
-    # if cap.outfit_id == character.outfit.outfit_id do
-    #   "for #{character.outfit.name}!"
+    # if cap.outfit_id == assigns.character.outfit.outfit_id do
+    #   "for #{assigns.character.outfit.name}!"
     # else
     #   ""
     # end
@@ -122,8 +122,8 @@ defmodule CAIWeb.ESSComponents do
       end
 
     capturing_outfit = "[outfit unknown]"
-    # if def.outfit_id == character.outfit.outfit_id do
-    #   "for #{character.outfit.name}!"
+    # if def.outfit_id == assigns.character.outfit.outfit_id do
+    #   "for #{assigns.character.outfit.name}!"
     # else
     #   ""
     # end
@@ -230,9 +230,7 @@ defmodule CAIWeb.ESSComponents do
           }
 
         _ ->
-          Logger.warning(
-            "Could not parse gunner assist xp for event log message: #{inspect(desc)}"
-          )
+          Logger.warning("Could not parse gunner assist xp for event log message: #{inspect(desc)}")
 
           %{}
       end
@@ -248,6 +246,86 @@ defmodule CAIWeb.ESSComponents do
       <% :else -> %>
         <%= @desc_downcase %>
     <% end %>
+    """
+  end
+
+  @ctf_flag_cap 2133
+  def build_event_log_item(
+        assigns,
+        %GainExperience{experience_id: @ctf_flag_cap, character_id: char_id} = ge,
+        char_id
+      ) do
+    assigns = Map.put(assigns, :team_id, ge.team_id)
+
+    ~H"""
+    <%= link_character(@character) %> captured a flag for the <%= CAI.factions()[@team_id].alias %>
+    """
+  end
+
+  @point_cap_ids [272, 557]
+  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
+      when id in @point_cap_ids do
+    assigns = Map.put(assigns, :action, (id == 272 && "captured") || "contributed to capturing")
+
+    ~H"""
+    <%= link_character(@character) %> <%= @action %> a point
+    """
+  end
+
+  @heal 4
+  def build_event_log_item(assigns, %GainExperience{experience_id: @heal}, _c_id) do
+    ~H"""
+    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> healed <%= link_character(
+      if @character.character_id == @event.character_id, do: @other, else: @character
+    ) %>
+    """
+  end
+
+  @revenge_kill 11
+  def build_event_log_item(assigns, %GainExperience{experience_id: @revenge_kill}, _c_id) do
+    ~H"""
+    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> got revenge on
+    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %>
+    """
+  end
+
+  @priority_kill 279
+  def build_event_log_item(assigns, %GainExperience{experience_id: @priority_kill}, _c_id) do
+    ~H"""
+    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> killed <%= link_character(
+      if @character.character_id == @event.character_id, do: @other, else: @character
+    ) %> (priority)
+    """
+  end
+
+  @priority_kill_assist 371
+  def build_event_log_item(assigns, %GainExperience{experience_id: @priority_kill_assist}, _c_id) do
+    ~H"""
+    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> assisted in killing
+    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %> (priority)
+    """
+  end
+
+  @spawn_beacon_kill 270
+  def build_event_log_item(assigns, %GainExperience{experience_id: @spawn_beacon_kill}, _c_id) do
+    ~H"""
+    <%= link_character(@character) %> destroyed an enemy spawn beacon
+    """
+  end
+
+  @end_kill_streak 38
+  def build_event_log_item(assigns, %GainExperience{experience_id: @end_kill_streak}, _c_id) do
+    ~H"""
+    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> ended
+    <%= link_character(if(@character.character_id == @event.character_id, do: @other, else: @character), true) %> kill streak
+    """
+  end
+
+  @domination 10
+  def build_event_log_item(assigns, %GainExperience{experience_id: @domination}, _c_id) do
+    ~H"""
+    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> killed
+    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %> (domination)
     """
   end
 

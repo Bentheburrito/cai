@@ -100,6 +100,7 @@ defmodule CAIWeb.SessionLive.Show do
       {events_to_stream, remaining_events} ->
         # event_tuples = map_events_to_tuples(events_to_stream, socket.assigns.character)
         bulk_append(events_to_stream, socket.assigns.character, new_events_limit)
+
         {:noreply, socket |> assign(:remaining_events, remaining_events) |> assign(:loading_more?, true)}
     end
   end
@@ -116,6 +117,18 @@ defmodule CAIWeb.SessionLive.Show do
   # Historic Session - bulk insert the given event tuples
   @impl true
   def handle_info({:bulk_append, event_tuples, new_events_limit}, socket) do
+    # TODO: to group related events into a single log in the event feed, will need to:
+    # 1. add another element to each tuple in `event_tuples` that has additional text/logos to be appended to the log
+    # (e.g. logo for priority kill, domination, ended killstreak, etc.) (*side note: at this point, should we have a
+    # generic "Event" struct to hold all of this info instead of a 4-elem tuple?)
+    # 2. before passing to the stream, look through `event_tuples`, and "combine" them, updating the 4th element in the
+    # tuple as we go
+    # 3. to ensure we load all events that need to be combined, we can't just take the first 15. Need to use
+    # Enum.split_while to potentially get more than 15 if (for example) events 13-17 have the same timestamp. Make sure
+    # to update `new_events_limit` in this case as well.
+    # CAVEAT: for live sessions, how do we combine those events? do we queue/stall for a couple of seconds? Maybe using
+    # a generic event struct (see *note), we could use the stream's updating function when the struct has an `:id`
+    # field?
     {
       :noreply,
       socket
@@ -191,7 +204,7 @@ defmodule CAIWeb.SessionLive.Show do
         other
 
       {{:ok, :not_found}, other_id} ->
-        Logger.info("Did you query for a non-character ID? Got {:ok, :not_found} for #{other_id}")
+        Logger.info("Character ID not_found: #{other_id}")
         {:unavailable, other_id}
 
       {reason, other_id} ->
