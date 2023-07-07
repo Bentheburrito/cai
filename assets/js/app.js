@@ -24,9 +24,9 @@ import topbar from "../vendor/topbar"
 
 const extractDateTime = element => {
   // The inner HTML should be a unix timestamp.
-  const timestamp = parseInt(element.innerHTML);
+  const timestamp = parseInt(element.textContent);
   if (!timestamp) {
-    console.error(`formatTimestamp: element's inner HTML is not an int: ${element.innerHTML}`);
+    console.error(`formatTimestamp: element's inner HTML is not an int: ${element.textContent}`);
     return;
   }
 
@@ -44,14 +44,14 @@ const formatTimestamp = context => {
   const dateTimeObject = extractDateTime(context.el);
   if (!dateTimeObject) return;
 
-  context.el.innerHTML = `${dateTimeObject.toLocaleDateString()} @ ${dateTimeObject.toLocaleTimeString()}`;
+  context.el.textContent = `${dateTimeObject.toLocaleDateString()} @ ${dateTimeObject.toLocaleTimeString()}`;
 }
 
 const hoverFormatTimestamp = context => {
   const dateTimeObject = extractDateTime(context.el);
   if (!dateTimeObject) return;
 
-  context.el.innerHTML = dateTimeObject.toLocaleTimeString({}, { hour12: false });
+  context.el.textContent = dateTimeObject.toLocaleTimeString({}, { hour12: false });
   context.el.setAttribute("title", `${dateTimeObject.toLocaleDateString()} @ ${dateTimeObject.toLocaleTimeString()}`);
 }
 
