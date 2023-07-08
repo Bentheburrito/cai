@@ -28,6 +28,7 @@ defmodule CAIWeb.ESSComponents do
   attr(:other, :map)
   attr(:id, :string)
   attr(:count, :integer)
+  attr(:metadata, :list)
 
   def event_item(assigns) do
     ~H"""
@@ -44,6 +45,7 @@ defmodule CAIWeb.ESSComponents do
         <.hover_timestamp id={"#{@id}-timestamp"} unix_timestamp={@event.timestamp} />
         <%= log %>
         <span :if={@count > 1}>(x<%= @count %>)</span>
+        <span :if={@metadata != :no_metadata}><%= Enum.join(@metadata, " ") %></span>
       </div>
     <% end %>
     """

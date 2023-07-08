@@ -39,9 +39,9 @@ defmodule CAIWeb.SessionLive.Show do
          {:ok, logout} <- parse_int_param(logout, socket),
          {:ok, %Character{} = character} <- get_character(character_id, socket),
          {:ok, event_history} <- get_session_history(character.character_id, login, logout, socket) do
-      {init_events, remaining_events} = Enum.split(event_history, @events_limit)
+      {init_events, remaining_events, new_limit} = split_events_while(event_history, @events_limit)
 
-      bulk_append(init_events, character, @events_limit)
+      bulk_append(init_events, character, new_limit)
 
       {
         :noreply,
@@ -91,13 +91,12 @@ defmodule CAIWeb.SessionLive.Show do
   # Stream some more events (if there are any) when "Load More" is clicked
   @impl true
   def handle_event("load-more-events", _params, socket) do
-    new_events_limit = Map.get(socket.assigns, :events_limit, @events_limit) + @events_limit
-
-    case Enum.split(socket.assigns.remaining_events, @events_limit) do
-      {[], _} ->
+    case split_events_while(socket.assigns.remaining_events, @events_limit) do
+      {[], _, _} ->
         {:noreply, assign(socket, :remaining_events, [])}
 
-      {events_to_stream, remaining_events} ->
+      {events_to_stream, remaining_events, events_limit} ->
+        new_events_limit = Map.get(socket.assigns, :events_limit, @events_limit) + events_limit
         bulk_append(events_to_stream, socket.assigns.character, new_events_limit)
 
         {:noreply, socket |> assign(:remaining_events, remaining_events) |> assign(:loading_more?, true)}
@@ -169,32 +168,86 @@ defmodule CAIWeb.SessionLive.Show do
 
     init_events
     |> Enum.reduce([], fn
+      # STATE: first element
       e, [] ->
         other =
           get_other_character(character.character_id, e, &Map.fetch(other_character_map, &1))
 
-        [{e, character, other, 1}]
+        if supplemental_kill_ge?(e) do
+          [{:building, character, other, 1, {:building, :kill, [supplement_type(e.experience_id)]}}]
+        else
+          [{e, character, other, 1, :no_metadata}]
+        end
 
-      e, [{prev_e, _, _, prev_count} = prev_tuple | mapped] ->
+      # STATE: currently building a kill event, with some supplemental data coming from GE events
+      e, [{prev_e, prev_char, prev_other, prev_count, {:building, :kill, metadata}} | mapped] ->
         other =
           get_other_character(character.character_id, e, &Map.fetch(other_character_map, &1))
 
-        if consecutive?(e, prev_e) do
-          IO.puts("""
-          COMBINING THESE TWO FOR A COUNT OF #{prev_count + 1}:
-          #{inspect(e)}
-          =======
-          #{inspect(prev_e)}
+        # character_id = character.character_id
+        # attacker_id = case other do
+        #   :noop -> 0
+        #   character_id: id} -> id
+        #   {:unavailable, id} -> id
+        # end
 
-          """)
+        cond do
+          supplemental_kill_ge?(e) ->
+            [{prev_e, prev_char, prev_other, prev_count, {:building, :kill, [supplement_type(e.experience_id) | metadata]}} | mapped]
 
-          [{e, character, other, prev_count + 1} | mapped]
-        else
-          [{e, character, other, 1}, prev_tuple | mapped]
+            #character_id: ^character_id, attacker_character_id: ^attacker_id
+          match?(%Death{}, e) ->
+            IO.inspect "YAY"
+            [{e, character, other, prev_count, metadata} | mapped]
+
+          :else ->
+            IO.inspect(e, label: "hmmm probably shouldn't see this")
+            [{e, character, other, 1, :no_metadata}, {prev_e, prev_char, prev_other, prev_count, metadata} | mapped]
+        end
+
+      # STATE: Regular iteration, might be counting consecutive events, might run into a new supplemental event
+      e, [{prev_e, _, _, prev_count, _} = prev_tuple | mapped] ->
+        other =
+          get_other_character(character.character_id, e, &Map.fetch(other_character_map, &1))
+
+        cond do
+          consecutive?(e, prev_e) ->
+            IO.puts("""
+            COMBINING THESE TWO FOR A COUNT OF #{prev_count + 1}:
+            #{inspect(e)}
+            =======
+            #{inspect(prev_e)}
+            """)
+
+            [{e, character, other, prev_count + 1, :no_metadata} | mapped]
+
+          supplemental_kill_ge?(e) ->
+            [{:building, character, other, 1, {:building, :kill, [supplement_type(e.experience_id)]}} | mapped]
+
+          :else ->
+            [{e, character, other, 1, :no_metadata}, prev_tuple | mapped]
         end
     end)
     |> Enum.reverse()
   end
+
+  defp supplemental_kill_ge?(%GainExperience{experience_id: id}), do: id in [1, 8, 10, 11, 32, 38, 279, 293, 294, 595]
+  defp supplemental_kill_ge?(_event), do: false
+
+
+  defp supplement_type(1), do: :kill_player
+  defp supplement_type(8), do: :kill_streak
+  defp supplement_type(10), do: :domination
+  defp supplement_type(11), do: :revenge
+  defp supplement_type(37), do: :headshot
+  defp supplement_type(32), do: :nemisis_kill
+  defp supplement_type(38), do: :end_kill_streak
+  defp supplement_type(279), do: :priority
+  defp supplement_type(293), do: :motion_detect ## ???
+  defp supplement_type(294), do: :squad_motion_spot
+  defp supplement_type(595), do: :bounty_kill_streak
+
+  # String.contains?(desc, "kill") or String.contains?(desc, "headshot") or String.contains?(desc, "motion")
 
   defp consecutive?(%mod1{} = e1, %mod2{} = e2) do
     mod1 == mod2 and
@@ -202,6 +255,28 @@ defmodule CAIWeb.SessionLive.Show do
       Map.get(e1, :attacker_character_id) == Map.get(e2, :attacker_character_id) and
       Map.get(e1, :other_id) == Map.get(e2, :other_id) and
       Map.get(e1, :experience_id) == Map.get(e2, :experience_id)
+  end
+
+  defp split_events_while(events, preferred_limit) do
+    split_events_while(_taken = [], _remaining = events, _num_taken = 0, preferred_limit)
+  end
+
+  defp split_events_while(taken, [], num_taken, _preferred_limit) do
+    {Enum.reverse(taken), [], num_taken}
+  end
+
+  defp split_events_while([%{timestamp: t} | _] = taken, [%{timestamp: t} = next | remaining], num_taken, preferred_limit) do
+    split_events_while([next | taken], remaining, num_taken + 1, preferred_limit)
+  end
+
+  defp split_events_while(taken, [next | remaining], num_taken, preferred_limit) when num_taken < preferred_limit do
+    split_events_while([next | taken], remaining, num_taken + 1, preferred_limit)
+  end
+
+  defp split_events_while(taken, remaining, num_taken, _preferred_limit) do
+    IO.inspect length(taken), label: "length"
+    IO.inspect num_taken, label: "nu mtaken"
+    {Enum.reverse(taken), remaining, num_taken}
   end
 
   defp get_session_history(character_id, login, logout, socket) do
@@ -265,7 +340,7 @@ defmodule CAIWeb.SessionLive.Show do
 
   defp do_get_other_character(_, _, _), do: :noop
 
-  defp event_to_dom_id({event, _, _, _}) do
+  defp event_to_dom_id({event, _, _, _, _}) do
     hash = :md5 |> :crypto.hash(inspect(event)) |> Base.encode16()
     "events-#{event.timestamp}-#{hash}"
   end
