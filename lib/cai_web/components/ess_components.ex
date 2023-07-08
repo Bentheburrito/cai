@@ -27,6 +27,7 @@ defmodule CAIWeb.ESSComponents do
   attr(:character, :map)
   attr(:other, :map)
   attr(:id, :string)
+  attr(:count, :integer)
 
   def event_item(assigns) do
     ~H"""
@@ -42,6 +43,7 @@ defmodule CAIWeb.ESSComponents do
       >
         <.hover_timestamp id={"#{@id}-timestamp"} unix_timestamp={@event.timestamp} />
         <%= log %>
+        <span :if={@count > 1}>(x<%= @count %>)</span>
       </div>
     <% end %>
     """
@@ -292,17 +294,18 @@ defmodule CAIWeb.ESSComponents do
   @priority_kill 279
   def build_event_log_item(assigns, %GainExperience{experience_id: @priority_kill}, _c_id) do
     ~H"""
-    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> killed <%= link_character(
-      if @character.character_id == @event.character_id, do: @other, else: @character
-    ) %> (priority)
+    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %>
+    killed a priority target,
+    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %>
     """
   end
 
   @priority_kill_assist 371
   def build_event_log_item(assigns, %GainExperience{experience_id: @priority_kill_assist}, _c_id) do
     ~H"""
-    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> assisted in killing
-    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %> (priority)
+    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %>
+    assisted in killing a priority target,
+    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %>
     """
   end
 
@@ -324,8 +327,8 @@ defmodule CAIWeb.ESSComponents do
   @domination 10
   def build_event_log_item(assigns, %GainExperience{experience_id: @domination}, _c_id) do
     ~H"""
-    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> killed
-    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %> (domination)
+    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> is dominating
+    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %>
     """
   end
 
@@ -355,12 +358,14 @@ defmodule CAIWeb.ESSComponents do
   end
 
   defp link_character({:unavailable, npc_id}, _) do
-    assigns = %{}
 
     if npc_id == 0 do
-      ~H""
+      ""
     else
-      ~H"a vehicle"
+      assigns = %{npc_id: npc_id}
+      ~H"""
+      <span title={"NPC ID #{@npc_id}"}>a vehicle</span>
+      """
     end
   end
 

@@ -98,7 +98,6 @@ defmodule CAIWeb.SessionLive.Show do
         {:noreply, assign(socket, :remaining_events, [])}
 
       {events_to_stream, remaining_events} ->
-        # event_tuples = map_events_to_tuples(events_to_stream, socket.assigns.character)
         bulk_append(events_to_stream, socket.assigns.character, new_events_limit)
 
         {:noreply, socket |> assign(:remaining_events, remaining_events) |> assign(:loading_more?, true)}
@@ -168,11 +167,41 @@ defmodule CAIWeb.SessionLive.Show do
 
     other_character_map = other_character_ids |> Characters.get_many() |> Map.put(character.character_id, character)
 
-    Enum.map(init_events, fn e ->
-      other = get_other_character(character.character_id, e, &Map.fetch(other_character_map, &1))
+    init_events
+    |> Enum.reduce([], fn
+      e, [] ->
+        other =
+          get_other_character(character.character_id, e, &Map.fetch(other_character_map, &1))
 
-      {e, character, other}
+        [{e, character, other, 1}]
+
+      e, [{prev_e, _, _, prev_count} = prev_tuple | mapped] ->
+        other =
+          get_other_character(character.character_id, e, &Map.fetch(other_character_map, &1))
+
+        if consecutive?(e, prev_e) do
+          IO.puts("""
+          COMBINING THESE TWO FOR A COUNT OF #{prev_count + 1}:
+          #{inspect(e)}
+          =======
+          #{inspect(prev_e)}
+
+          """)
+
+          [{e, character, other, prev_count + 1} | mapped]
+        else
+          [{e, character, other, 1}, prev_tuple | mapped]
+        end
     end)
+    |> Enum.reverse()
+  end
+
+  defp consecutive?(%mod1{} = e1, %mod2{} = e2) do
+    mod1 == mod2 and
+      Map.get(e1, :character_id) == Map.get(e2, :character_id) and
+      Map.get(e1, :attacker_character_id) == Map.get(e2, :attacker_character_id) and
+      Map.get(e1, :other_id) == Map.get(e2, :other_id) and
+      Map.get(e1, :experience_id) == Map.get(e2, :experience_id)
   end
 
   defp get_session_history(character_id, login, logout, socket) do
@@ -236,7 +265,7 @@ defmodule CAIWeb.SessionLive.Show do
 
   defp do_get_other_character(_, _, _), do: :noop
 
-  defp event_to_dom_id({event, _, _}) do
+  defp event_to_dom_id({event, _, _, _}) do
     hash = :md5 |> :crypto.hash(inspect(event)) |> Base.encode16()
     "events-#{event.timestamp}-#{hash}"
   end
