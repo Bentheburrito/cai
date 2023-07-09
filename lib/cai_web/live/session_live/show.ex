@@ -193,25 +193,18 @@ defmodule CAIWeb.SessionLive.Show do
     events_to_entries(new_mapped, remaining, character, other_char_map)
   end
 
-  defp events_to_entries([%Entry{event: prev_e, other: prev_other, count: prev_count} = prev_entry | mapped], [e | rem_events], character, other_char_map) do
-    # Commenting out for now, because I think this needs to be changed to work on %Entry{}s. What if 2 events are condensed into a (x2), but we needed to
-    # keep them separate, because the 2nd one has bonus GEs associated with it?
-    # E.g. we want:
-    # X killed Y
-    # X killed Y [end kill streak]
-    # instead of
-    # X killed Y (x2) OR X killed Y (x2) [end kill streak]
-    # condense consecutive events
-    #
-    # TL;DR: need to take metadata into account when condensing and increasing `count`, and metadata isn't created until
-    # everything's been consensed into entries
-    #
-    # if consecutive?(e, prev_e) do
-    #   events_to_entries([{e, character, prev_other, prev_count + 1, :no_metadata} | mapped], rem_events, character, other_char_map)
-    # else
+  defp events_to_entries([%Entry{event: prev_e1} = prev_entry1, %Entry{event: prev_e2, count: prev_count} = prev_entry2 | mapped], [e | rem_events], character, other_char_map) do
+    if consecutive?(prev_e1, prev_e2) do
+      events_to_entries([%Entry{prev_entry2 | count: prev_count + 1} | mapped], [e | rem_events], character, other_char_map)
+    else
       other = get_other_character(character.character_id, e, &Map.fetch(other_char_map, &1))
-      events_to_entries([Entry.new(e, character, other), prev_entry | mapped], rem_events, character, other_char_map)
-    # end
+      events_to_entries([Entry.new(e, character, other), prev_entry1, prev_entry2 | mapped], rem_events, character, other_char_map)
+    end
+  end
+
+  defp events_to_entries(mapped, [e | rem_events], character, other_char_map) do
+    other = get_other_character(character.character_id, e, &Map.fetch(other_char_map, &1))
+    events_to_entries([Entry.new(e, character, other) | mapped], rem_events, character, other_char_map)
   end
 
   # No more events to iterate
