@@ -8,6 +8,7 @@ defmodule CAIWeb.SessionLive.Show do
   alias CAI.Characters
   alias CAI.Characters.Character
   alias CAI.ESS.{GainExperience, Death, VehicleDestroy}
+  alias CAIWeb.SessionLive.Entry
   alias Phoenix.PubSub
 
   require Logger
@@ -146,7 +147,7 @@ defmodule CAIWeb.SessionLive.Show do
     other = get_other_character(character.character_id, event)
 
     {:noreply,
-     stream_insert(socket, :events, {event, character, other},
+     stream_insert(socket, :events, Entry.new(event, character, other),
        at: @prepend,
        limit: @events_limit
      )}
@@ -177,23 +178,22 @@ defmodule CAIWeb.SessionLive.Show do
     other =
       get_other_character(character.character_id, e, &Map.fetch(other_char_map, &1))
 
-      events_to_entries([{e, character, other, 1, :no_metadata}], init_events, character, other_char_map)
+      events_to_entries([Entry.new(e, character, other)], init_events, character, other_char_map)
     end
 
   # exit condition (no remaining events)
   defp events_to_entries(mapped, [], _character, _other_char_map), do: mapped
 
   # when the prev_e and e timestamps match, let's check for a group of GEs + corresponding Death and condense them
-  defp events_to_entries([{%{timestamp: t} = prev_e, _, _, _, _} | mapped], [%{timestamp: t} = e | rem_events], character, other_char_map) do
+  defp events_to_entries([%Entry{event: %{timestamp: t} = prev_e} | mapped], [%{timestamp: t} = e | rem_events], character, other_char_map) do
     # grouped_map looks like %{{timestamp, attacker_id, char_id} => %{death: %Death{}, supplemental: [%GE{}]}}
     {new_mapped, remaining} =
       condense_deaths_and_bonuses([prev_e, e | rem_events], mapped, %{}, _target_t = t, character, other_char_map)
-      # events_to_entries_with_condensed_deaths(e, 1, prev_e, mapped, rem_events, %{}, character, other_char_map, length(rem_events))
 
     events_to_entries(new_mapped, remaining, character, other_char_map)
   end
 
-  defp events_to_entries([{prev_e, _, prev_other, prev_count, _} = prev_tuple | mapped], [e | rem_events], character, other_char_map) do
+  defp events_to_entries([%Entry{event: prev_e, other: prev_other, count: prev_count} = prev_entry | mapped], [e | rem_events], character, other_char_map) do
     # Commenting out for now, because I think this needs to be changed to work on %Entry{}s. What if 2 events are condensed into a (x2), but we needed to
     # keep them separate, because the 2nd one has bonus GEs associated with it?
     # E.g. we want:
@@ -210,7 +210,7 @@ defmodule CAIWeb.SessionLive.Show do
     #   events_to_entries([{e, character, prev_other, prev_count + 1, :no_metadata} | mapped], rem_events, character, other_char_map)
     # else
       other = get_other_character(character.character_id, e, &Map.fetch(other_char_map, &1))
-      events_to_entries([{e, character, other, 1, :no_metadata}, prev_tuple | mapped], rem_events, character, other_char_map)
+      events_to_entries([Entry.new(e, character, other), prev_entry | mapped], rem_events, character, other_char_map)
     # end
   end
 
@@ -253,7 +253,7 @@ defmodule CAIWeb.SessionLive.Show do
       # this event seems to be unrelated, so just append it to `mapped`
       _ ->
         other = get_other_character(character.character_id, event, &Map.fetch(other_char_map, &1))
-        new_mapped = [{event, character, other, 1, :no_metadata} | mapped]
+        new_mapped = [Entry.new(event, character, other) | mapped]
 
         condense_deaths_and_bonuses(rem_events, new_mapped, grouped, target_t, character, other_char_map)
     end
@@ -265,10 +265,10 @@ defmodule CAIWeb.SessionLive.Show do
         # If we didn't find a death associated with these bonuses, just put the bonuses back as regular entries.
         if is_nil(d) do
           other = get_other_character(character.character_id, List.first(bonuses), &Map.fetch(other_char_map, &1))
-          Enum.map(bonuses, &{&1, character, other, 1, :no_metadata}) ++ acc
+          Enum.map(bonuses, &Entry.new(&1, character, other)) ++ acc
         else
           other = get_other_character(character.character_id, d, &Map.fetch(other_char_map, &1))
-          [{d, character, other, 1, bonuses} | acc]
+          [Entry.new(d, character, other, 1, bonuses) | acc]
         end
     end
 
@@ -364,7 +364,7 @@ defmodule CAIWeb.SessionLive.Show do
 
   defp do_get_other_character(_, _, _), do: :noop
 
-  defp event_to_dom_id({event, _, _, _, _}) do
+  defp event_to_dom_id(%Entry{event: event}) do
     hash = :md5 |> :crypto.hash(inspect(event)) |> Base.encode16()
     "events-#{event.timestamp}-#{hash}"
   end

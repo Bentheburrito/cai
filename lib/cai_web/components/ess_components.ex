@@ -23,16 +23,17 @@ defmodule CAIWeb.ESSComponents do
 
   require Logger
 
-  attr(:event, :map)
-  attr(:character, :map)
-  attr(:other, :map)
+  attr(:entry, :map)
   attr(:id, :string)
-  attr(:count, :integer)
-  attr(:metadata, :list)
 
   def event_item(assigns) do
     ~H"""
-    <%= unless (log = build_event_log_item(assigns, @event, @character.character_id)) == "" do %>
+    <% log_item_assigns =
+    assigns
+    |> Map.put(:character, @entry.character)
+    |> Map.put(:other, @entry.other)
+    |> Map.put(:event, @entry.event) %>
+    <%= unless (log = build_event_log_item(log_item_assigns, @entry.event, @entry.character.character_id)) == "" do %>
       <div
         id={@id}
         phx-mounted={
@@ -42,10 +43,10 @@ defmodule CAIWeb.ESSComponents do
           )
         }
       >
-        <.hover_timestamp id={"#{@id}-timestamp"} unix_timestamp={@event.timestamp} />
+        <.hover_timestamp id={"#{@id}-timestamp"} unix_timestamp={@entry.event.timestamp} />
         <%= log %>
-        <span :if={@count > 1}>(x<%= @count %>)</span>
-        <span :if={@metadata != :no_metadata}>[Bonuses: <%= Enum.map_join(@metadata, ", ", &CAI.xp()[&1.experience_id]["description"]) %>]</span>
+        <span :if={@entry.count > 1}>(x<%= @entry.count %>)</span>
+        <span :if={not match?([], @entry.bonuses)}>[Bonuses: <%= Enum.map_join(@entry.bonuses, ", ", &CAI.xp()[&1.experience_id]["description"]) %>]</span>
       </div>
     <% end %>
     """
