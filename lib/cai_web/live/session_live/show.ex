@@ -78,6 +78,7 @@ defmodule CAIWeb.SessionLive.Show do
         |> stream(:events, [], at: @prepend, limit: @events_limit)
         |> assign(:page_title, "#{character.name_first}'s Session")
         |> assign(:live?, true)
+        |> assign(:pending_groups, %{})
         |> assign(:character, character)
       }
     end
@@ -109,33 +110,56 @@ defmodule CAIWeb.SessionLive.Show do
     liveview = self()
 
     Task.start_link(fn ->
-      tuples = map_events_to_tuples(events_to_stream, character)
-      send(liveview, {:bulk_append, tuples, new_events_limit})
+      entries = map_events_to_entries(events_to_stream, character)
+      send(liveview, {:bulk_append, entries, new_events_limit})
     end)
   end
 
   # Historic Session - bulk insert the given event tuples
   @impl true
-  def handle_info({:bulk_append, event_tuples, new_events_limit}, socket) do
-    # TODO: to group related events into a single log in the event feed, will need to:
-    # 1. add another element to each tuple in `event_tuples` that has additional text/logos to be appended to the log
-    # (e.g. logo for priority kill, domination, ended killstreak, etc.) (*side note: at this point, should we have a
-    # generic "Event" struct to hold all of this info instead of a 4-elem tuple?)
-    # 2. before passing to the stream, look through `event_tuples`, and "combine" them, updating the 4th element in the
-    # tuple as we go
-    # 3. to ensure we load all events that need to be combined, we can't just take the first 15. Need to use
-    # Enum.split_while to potentially get more than 15 if (for example) events 13-17 have the same timestamp. Make sure
-    # to update `new_events_limit` in this case as well.
-    # CAVEAT: for live sessions, how do we combine those events? do we queue/stall for a couple of seconds? Maybe using
-    # a generic event struct (see *note), we could use the stream's updating function when the struct has an `:id`
-    # field?
+  def handle_info({:bulk_append, entries, new_events_limit}, socket) do
     {
       :noreply,
       socket
-      |> stream(:events, event_tuples, at: @append, limit: new_events_limit)
+      |> stream(:events, entries, at: @append, limit: new_events_limit)
       |> assign(:events_limit, new_events_limit)
       |> assign(:loading_more?, false)
     }
+  end
+
+  # Live Session - receive a new Death event via PubSub
+  @event_pending_delay 1000
+  @impl true
+  def handle_info({:event, %Ecto.Changeset{data: %Death{}} = event_cs}, socket) do
+    event = Ecto.Changeset.apply_changes(event_cs)
+    IO.inspect event, label: "YEP DEATH"
+    pending_key = {event.timestamp, event.attacker_character_id, event.character_id}
+
+    pending_groups = socket.assigns.pending_groups
+
+    if is_map_key(pending_groups, pending_key) do
+      {:noreply, update(socket, :pending_groups, &put_in(&1, [pending_key, :death], event))}
+    else
+      Process.send_after(self(), {:build_entries, pending_key}, @event_pending_delay)
+      {:noreply, update(socket, :pending_groups, &Map.put(&1, pending_key, %{death: event, bonuses: []}))}
+    end
+  end
+
+  # Live Session - receive a new kill bonus GE event via PubSub
+  @impl true
+  def handle_info({:event, %Ecto.Changeset{changes: %{experience_id: id}} = event_cs}, socket) when is_kill_xp(id) do
+    event = Ecto.Changeset.apply_changes(event_cs)
+    pending_key = {event.timestamp, event.character_id, event.other_id}
+
+    pending_groups = socket.assigns.pending_groups
+
+    if is_map_key(pending_groups, pending_key) do
+      updater = fn groups -> update_in(groups, [pending_key, :bonuses], &[event | &1] ) end
+      {:noreply, update(socket, :pending_groups, updater)}
+    else
+      Process.send_after(self(), {:build_entries, pending_key}, @event_pending_delay)
+      {:noreply, update(socket, :pending_groups, &Map.put(&1, pending_key, %{death: nil, bonuses: [event]}))}
+    end
   end
 
   # Live Session - receive a new event via PubSub
@@ -153,9 +177,35 @@ defmodule CAIWeb.SessionLive.Show do
      )}
   end
 
+  @impl true
+  def handle_info({:build_entries, {_, char_id, other_id} = pending_key}, socket) do
+    case Map.fetch(socket.assigns.pending_groups, pending_key) do
+      {:ok, group} ->
+        character = socket.assigns.character
+        other_map =
+          case get_other_character(character.character_id, %GainExperience{character_id: char_id, other_id: other_id}) do
+            %Character{} = other -> %{other.character_id => other}
+            {:unavailable, other_id} -> %{other_id => {:unavailable, other_id}}
+          end
+
+        entries = grouped_to_entries(%{pending_key => group}, [], character, other_map)
+
+        {
+          :noreply,
+          socket
+          |> update(:pending_groups, &Map.delete(&1, pending_key))
+          |> stream(:events, entries, at: @prepend, limit: @events_limit)
+        }
+
+      :error ->
+        Logger.error("Received :build_entries message, but no group was found under #{inspect(pending_key)}")
+        {:noreply, socket}
+    end
+  end
+
   ### HELPERS ###
 
-  defp map_events_to_tuples(init_events, character) do
+  defp map_events_to_entries(init_events, character) do
     other_character_ids =
       Stream.flat_map(
         init_events,
@@ -253,7 +303,13 @@ defmodule CAIWeb.SessionLive.Show do
   end
 
   defp apply_grouped(remaining, mapped, grouped, character, other_char_map) do
-    new_mapped = for {_, %{death: d, bonuses: bonuses}} <- grouped, reduce: mapped do
+    new_mapped = grouped_to_entries(grouped, mapped, character, other_char_map)
+
+    {new_mapped, remaining}
+  end
+
+  defp grouped_to_entries(grouped, init_entries, character, other_char_map) do
+    for {_, %{death: d, bonuses: bonuses}} <- grouped, reduce: init_entries do
       acc ->
         # If we didn't find a death associated with these bonuses, just put the bonuses back as regular entries.
         if is_nil(d) do
@@ -264,8 +320,6 @@ defmodule CAIWeb.SessionLive.Show do
           [Entry.new(d, character, other, 1, bonuses) | acc]
         end
     end
-
-    {new_mapped, remaining}
   end
 
   defp consecutive?(%mod1{} = e1, %mod2{} = e2) do

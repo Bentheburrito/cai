@@ -94,7 +94,7 @@ defmodule CAI do
     }
 
   @doc """
-  Character IDs always odd.
+  Character IDs are always odd.
 
   https://discord.com/channels/251073753759481856/451032574538547201/1089955112216170496
   """
