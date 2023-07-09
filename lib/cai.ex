@@ -20,6 +20,14 @@ defmodule CAI do
   @xp CAI.Scripts.load_static_file(@json_cache_path <> "/xp.json")
   def xp, do: @xp
 
+  kill_xp_filter = fn {_id, %{"description" => desc}} ->
+    desc = String.downcase(desc)
+    (String.contains?(desc, "kill") or String.contains?(desc, "headshot")) and not String.contains?(desc, "assist")
+  end
+
+  @kill_xp @xp |> Stream.filter(kill_xp_filter) |> Enum.map(fn {id, _} -> id end)
+  defguard is_kill_xp(id) when id in @kill_xp
+
   assist_xp_filter = fn {_id, %{"description" => desc}} ->
     desc
     |> String.downcase()

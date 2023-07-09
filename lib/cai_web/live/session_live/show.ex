@@ -1,6 +1,7 @@
 defmodule CAIWeb.SessionLive.Show do
   use CAIWeb, :live_view
 
+  import CAI, only: [is_kill_xp: 1]
   import CAIWeb.ESSComponents
   import CAIWeb.Utils
 
@@ -167,87 +168,112 @@ defmodule CAIWeb.SessionLive.Show do
     other_character_map = other_character_ids |> Characters.get_many() |> Map.put(character.character_id, character)
 
     init_events
-    |> Enum.reduce([], fn
-      # STATE: first element
-      e, [] ->
-        other =
-          get_other_character(character.character_id, e, &Map.fetch(other_character_map, &1))
-
-        if supplemental_kill_ge?(e) do
-          [{:building, character, other, 1, {:building, :kill, [supplement_type(e.experience_id)]}}]
-        else
-          [{e, character, other, 1, :no_metadata}]
-        end
-
-      # STATE: currently building a kill event, with some supplemental data coming from GE events
-      e, [{prev_e, prev_char, prev_other, prev_count, {:building, :kill, metadata}} | mapped] ->
-        other =
-          get_other_character(character.character_id, e, &Map.fetch(other_character_map, &1))
-
-        # character_id = character.character_id
-        # attacker_id = case other do
-        #   :noop -> 0
-        #   character_id: id} -> id
-        #   {:unavailable, id} -> id
-        # end
-
-        cond do
-          supplemental_kill_ge?(e) ->
-            [{prev_e, prev_char, prev_other, prev_count, {:building, :kill, [supplement_type(e.experience_id) | metadata]}} | mapped]
-
-            #character_id: ^character_id, attacker_character_id: ^attacker_id
-          match?(%Death{}, e) ->
-            IO.inspect "YAY"
-            [{e, character, other, prev_count, metadata} | mapped]
-
-          :else ->
-            IO.inspect(e, label: "hmmm probably shouldn't see this")
-            [{e, character, other, 1, :no_metadata}, {prev_e, prev_char, prev_other, prev_count, metadata} | mapped]
-        end
-
-      # STATE: Regular iteration, might be counting consecutive events, might run into a new supplemental event
-      e, [{prev_e, _, _, prev_count, _} = prev_tuple | mapped] ->
-        other =
-          get_other_character(character.character_id, e, &Map.fetch(other_character_map, &1))
-
-        cond do
-          consecutive?(e, prev_e) ->
-            IO.puts("""
-            COMBINING THESE TWO FOR A COUNT OF #{prev_count + 1}:
-            #{inspect(e)}
-            =======
-            #{inspect(prev_e)}
-            """)
-
-            [{e, character, other, prev_count + 1, :no_metadata} | mapped]
-
-          supplemental_kill_ge?(e) ->
-            [{:building, character, other, 1, {:building, :kill, [supplement_type(e.experience_id)]}} | mapped]
-
-          :else ->
-            [{e, character, other, 1, :no_metadata}, prev_tuple | mapped]
-        end
-    end)
+    |> events_to_entries(character, other_character_map)
     |> Enum.reverse()
   end
 
-  defp supplemental_kill_ge?(%GainExperience{experience_id: id}), do: id in [1, 8, 10, 11, 32, 38, 279, 293, 294, 595]
-  defp supplemental_kill_ge?(_event), do: false
+  # entry point
+  defp events_to_entries([e | init_events], character, other_char_map) do
+    other =
+      get_other_character(character.character_id, e, &Map.fetch(other_char_map, &1))
 
+      events_to_entries([{e, character, other, 1, :no_metadata}], init_events, character, other_char_map)
+    end
 
-  defp supplement_type(1), do: :kill_player
-  defp supplement_type(8), do: :kill_streak
-  defp supplement_type(10), do: :domination
-  defp supplement_type(11), do: :revenge
-  defp supplement_type(37), do: :headshot
-  defp supplement_type(32), do: :nemisis_kill
-  defp supplement_type(38), do: :end_kill_streak
-  defp supplement_type(279), do: :priority
-  defp supplement_type(293), do: :motion_detect ## ???
-  defp supplement_type(294), do: :squad_motion_spot
-  defp supplement_type(595), do: :bounty_kill_streak
+  # exit condition (no remaining events)
+  defp events_to_entries(mapped, [], _character, _other_char_map), do: mapped
 
-  # String.contains?(desc, "kill") or String.contains?(desc, "headshot") or String.contains?(desc, "motion")
+  # when the prev_e and e timestamps match, let's check for a group of GEs + corresponding Death and condense them
+  defp events_to_entries([{%{timestamp: t} = prev_e, _, _, _, _} | mapped], [%{timestamp: t} = e | rem_events], character, other_char_map) do
+    # grouped_map looks like %{{timestamp, attacker_id, char_id} => %{death: %Death{}, supplemental: [%GE{}]}}
+    {new_mapped, remaining} =
+      condense_deaths_and_bonuses([prev_e, e | rem_events], mapped, %{}, _target_t = t, character, other_char_map)
+      # events_to_entries_with_condensed_deaths(e, 1, prev_e, mapped, rem_events, %{}, character, other_char_map, length(rem_events))
+
+    events_to_entries(new_mapped, remaining, character, other_char_map)
+  end
+
+  defp events_to_entries([{prev_e, _, prev_other, prev_count, _} = prev_tuple | mapped], [e | rem_events], character, other_char_map) do
+    # Commenting out for now, because I think this needs to be changed to work on %Entry{}s. What if 2 events are condensed into a (x2), but we needed to
+    # keep them separate, because the 2nd one has bonus GEs associated with it?
+    # E.g. we want:
+    # X killed Y
+    # X killed Y [end kill streak]
+    # instead of
+    # X killed Y (x2) OR X killed Y (x2) [end kill streak]
+    # condense consecutive events
+    #
+    # TL;DR: need to take metadata into account when condensing and increasing `count`, and metadata isn't created until
+    # everything's been consensed into entries
+    #
+    # if consecutive?(e, prev_e) do
+    #   events_to_entries([{e, character, prev_other, prev_count + 1, :no_metadata} | mapped], rem_events, character, other_char_map)
+    # else
+      other = get_other_character(character.character_id, e, &Map.fetch(other_char_map, &1))
+      events_to_entries([{e, character, other, 1, :no_metadata}, prev_tuple | mapped], rem_events, character, other_char_map)
+    # end
+  end
+
+  # No more events to iterate
+  defp condense_deaths_and_bonuses([], mapped, grouped, _target_t, character, other_char_map) do
+    apply_grouped([], mapped, grouped, character, other_char_map)
+  end
+
+  # If timestamps are different, we're done here
+  defp condense_deaths_and_bonuses([%{timestamp: t} | _] = rem_events, mapped, grouped, target_t, character, other_char_map) when t != target_t do
+    apply_grouped(rem_events, mapped, grouped, character, other_char_map)
+  end
+
+  # If `event` is a Death or bonus GE related to a death, add it to `grouped` keyed by
+  # {timestamp, attacker_id, victim_id}. Otherwise, append `event` to mapped
+  defp condense_deaths_and_bonuses([event | rem_events], mapped, grouped, target_t, character, other_char_map) do
+    case event do
+      # put the death event for a grouped entry
+      %Death{} ->
+        new_grouped = Map.update(
+          grouped,
+          {event.timestamp, event.attacker_character_id, event.character_id},
+          %{death: event, bonuses: []},
+          &Map.put(&1, :death, event)
+        )
+
+        condense_deaths_and_bonuses(rem_events, mapped, new_grouped, target_t, character, other_char_map)
+
+      # put a bonus event for a grouped entry
+      %GainExperience{experience_id: id} when is_kill_xp(id) ->
+        new_grouped = Map.update(
+          grouped,
+          {event.timestamp, event.character_id, event.other_id},
+          %{death: nil, bonuses: [event]},
+          &Map.update!(&1, :bonuses, fn bonuses -> [event | bonuses] end)
+        )
+
+        condense_deaths_and_bonuses(rem_events, mapped, new_grouped, target_t, character, other_char_map)
+
+      # this event seems to be unrelated, so just append it to `mapped`
+      _ ->
+        other = get_other_character(character.character_id, event, &Map.fetch(other_char_map, &1))
+        new_mapped = [{event, character, other, 1, :no_metadata} | mapped]
+
+        condense_deaths_and_bonuses(rem_events, new_mapped, grouped, target_t, character, other_char_map)
+    end
+  end
+
+  defp apply_grouped(remaining, mapped, grouped, character, other_char_map) do
+    new_mapped = for {_, %{death: d, bonuses: bonuses}} <- grouped, reduce: mapped do
+      acc ->
+        # If we didn't find a death associated with these bonuses, just put the bonuses back as regular entries.
+        if is_nil(d) do
+          other = get_other_character(character.character_id, List.first(bonuses), &Map.fetch(other_char_map, &1))
+          Enum.map(bonuses, &{&1, character, other, 1, :no_metadata}) ++ acc
+        else
+          other = get_other_character(character.character_id, d, &Map.fetch(other_char_map, &1))
+          [{d, character, other, 1, bonuses} | acc]
+        end
+    end
+
+    {new_mapped, remaining}
+  end
 
   defp consecutive?(%mod1{} = e1, %mod2{} = e2) do
     mod1 == mod2 and
@@ -274,8 +300,6 @@ defmodule CAIWeb.SessionLive.Show do
   end
 
   defp split_events_while(taken, remaining, num_taken, _preferred_limit) do
-    IO.inspect length(taken), label: "length"
-    IO.inspect num_taken, label: "nu mtaken"
     {Enum.reverse(taken), remaining, num_taken}
   end
 

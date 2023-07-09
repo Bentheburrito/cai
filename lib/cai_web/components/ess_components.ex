@@ -45,7 +45,7 @@ defmodule CAIWeb.ESSComponents do
         <.hover_timestamp id={"#{@id}-timestamp"} unix_timestamp={@event.timestamp} />
         <%= log %>
         <span :if={@count > 1}>(x<%= @count %>)</span>
-        <span :if={@metadata != :no_metadata}><%= Enum.join(@metadata, " ") %></span>
+        <span :if={@metadata != :no_metadata}>[Bonuses: <%= Enum.map_join(@metadata, ", ", &CAI.xp()[&1.experience_id]["description"]) %>]</span>
       </div>
     <% end %>
     """
