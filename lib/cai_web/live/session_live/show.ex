@@ -7,7 +7,7 @@ defmodule CAIWeb.SessionLive.Show do
 
   alias CAI.Characters
   alias CAI.Characters.Character
-  alias CAI.ESS.{GainExperience, Death, VehicleDestroy}
+  alias CAI.ESS.{GainExperience, Death, MetagameEvent, VehicleDestroy}
   alias CAIWeb.SessionLive.Entry
   alias Phoenix.PubSub
 
@@ -132,7 +132,6 @@ defmodule CAIWeb.SessionLive.Show do
   @impl true
   def handle_info({:event, %Ecto.Changeset{data: %Death{}} = event_cs}, socket) do
     event = Ecto.Changeset.apply_changes(event_cs)
-    IO.inspect event, label: "YEP DEATH"
     pending_key = {event.timestamp, event.attacker_character_id, event.character_id}
 
     pending_groups = socket.assigns.pending_groups
@@ -170,11 +169,24 @@ defmodule CAIWeb.SessionLive.Show do
 
     other = get_other_character(character.character_id, event)
 
-    {:noreply,
-     stream_insert(socket, :events, Entry.new(event, character, other),
-       at: @prepend,
-       limit: @events_limit
-     )}
+    prev_entry = Map.get(socket.assigns, :last_entry, Entry.new(%MetagameEvent{}, %{}))
+
+    # update an entry if it's comparable to the last
+    if consecutive?(event, prev_entry.event) do
+      updated_entry = %Entry{prev_entry | count: prev_entry.count + 1}
+      {:noreply,
+        socket
+        |> stream_insert(:events, updated_entry, at: @append, limit: @events_limit)
+        |> assign(:last_entry, updated_entry)
+      }
+    else
+      entry = Entry.new(event, character, other)
+      {:noreply,
+        socket
+        |> stream_insert(:events, entry, at: @prepend, limit: @events_limit)
+        |> assign(:last_entry, entry)
+      }
+    end
   end
 
   @impl true

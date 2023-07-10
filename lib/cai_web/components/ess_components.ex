@@ -65,7 +65,7 @@ defmodule CAIWeb.ESSComponents do
         _c_id
       ) do
     ~H"""
-    <%= link_character(@character) %> died of their own accord with <%= get_weapon_name(
+    <%= link_character(@character, @event.team_id) %> died of their own accord with <%= get_weapon_name(
       @event.attacker_weapon_id,
       @event.attacker_vehicle_id
     ) %>
@@ -74,9 +74,10 @@ defmodule CAIWeb.ESSComponents do
 
   def build_event_log_item(assigns, %Death{}, _c_id) do
     ~H"""
-    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %> killed <%= link_character(
-      if @character.character_id == @event.character_id, do: @character, else: @other
-    ) %> with <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
+    <%= link_character((if @character.character_id == @event.character_id, do: @other, else: @character), @event.attacker_team_id) %>
+    killed
+    <%= link_character((if @character.character_id == @event.character_id, do: @character, else: @other), @event.team_id) %>
+    with <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
     <%= (@event.is_headshot && "(headshot)") || "" %>
     """
   end
@@ -156,7 +157,7 @@ defmodule CAIWeb.ESSComponents do
         _c_id
       ) do
     ~H"""
-    <%= link_character(@character) %> destroyed their <%= CAI.vehicles()[
+    <%= link_character(@character, @event.team_id) %> destroyed their <%= CAI.vehicles()[
       @event.vehicle_id
     ]["name"] %> with <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
     """
@@ -164,10 +165,10 @@ defmodule CAIWeb.ESSComponents do
 
   def build_event_log_item(assigns, %VehicleDestroy{}, _c_id) do
     ~H"""
-    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %> destroyed <%= link_character(
-      (@character.character_id == @event.character_id && @character) || @other,
-      true
-    ) %> <%= CAI.vehicles()[@event.vehicle_id]["name"] %> with <%= get_weapon_name(
+    <%= link_character((if @character.character_id == @event.character_id, do: @other, else: @character), @event.attacker_team_id) %>
+    destroyed
+    <%= link_character((@character.character_id == @event.character_id && @character) || @other, @event.team_id, true) %>
+    <%= CAI.vehicles()[@event.vehicle_id]["name"] %> with <%= get_weapon_name(
       @event.attacker_weapon_id,
       @event.attacker_vehicle_id
     ) %>
@@ -349,9 +350,9 @@ defmodule CAIWeb.ESSComponents do
 
   def build_event_log_item(_, _, _), do: ""
 
-  defp link_character(maybe_character, possessive? \\ false)
+  defp link_character(maybe_character, team_id \\ :same_as_faction, possessive? \\ false)
 
-  defp link_character({:unavailable, character_id}, possessive?)
+  defp link_character({:unavailable, character_id}, _team_id, possessive?)
        when is_character_id(character_id) do
     assigns = %{character_id: character_id, possessive: (possessive? && "'s") || ""}
 
@@ -360,7 +361,7 @@ defmodule CAIWeb.ESSComponents do
     """
   end
 
-  defp link_character({:unavailable, npc_id}, _) do
+  defp link_character({:unavailable, npc_id}, _team_id, _) do
 
     if npc_id == 0 do
       ""
@@ -374,6 +375,7 @@ defmodule CAIWeb.ESSComponents do
 
   defp link_character(
          %Character{name_first: name, character_id: id, faction_id: faction_id},
+         team_id,
          possessive?
        ) do
     assigns = %{
@@ -382,12 +384,18 @@ defmodule CAIWeb.ESSComponents do
       possessive: (possessive? && "'s") || "",
       # Can't actually store these classes in `CAI.factions` because these classes won't be compiled...
       faction_classes:
-        case CAI.factions()[faction_id].alias do
-          "NS" -> "bg-gray-600 hover:bg-gray-800"
-          "VS" -> "bg-purple-600 hover:bg-purple-800"
-          "NC" -> "bg-blue-600 hover:bg-blue-800"
-          "TR" -> "bg-red-500 hover:bg-red-800"
-          "NSO" -> "bg-gray-600 hover:bg-gray-800"
+        case {CAI.factions()[faction_id].alias, team_id} do
+          {"NS", 1} -> "bg-gradient-to-r from-gray-600 to-purple-600 hover:bg-gray-800"
+          {"NS", 2} -> "bg-gradient-to-r from-gray-600 to-blue-600 hover:bg-gray-800"
+          {"NS", 3} -> "bg-gradient-to-r from-gray-600 to-red-500 hover:bg-gray-800"
+          {"NS", _} -> "bg-gray-600 hover:bg-gray-800"
+          {"NSO", 1} -> "bg-gradient-to-r from-gray-600 to-purple-600 hover:bg-gray-800"
+          {"NSO", 2} -> "bg-gradient-to-r from-gray-600 to-blue-600 hover:bg-gray-800"
+          {"NSO", 3} -> "bg-gradient-to-r from-gray-600 to-red-500 hover:bg-gray-800"
+          {"NSO", _} -> "bg-gray-600 hover:bg-gray-800"
+          {"NC", _} -> "bg-blue-600 hover:bg-blue-800"
+          {"VS", _} -> "bg-purple-600 hover:bg-purple-800"
+          {"TR", _} -> "bg-red-500 hover:bg-red-800"
           _ -> "bg-gray-600 hover:bg-gray-800"
         end
     }
