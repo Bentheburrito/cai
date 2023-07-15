@@ -47,7 +47,7 @@ defmodule CAIWeb.SessionLive.Show do
         |> stream(:events, [], reset: true, at: @append, limit: @events_limit)
         |> assign(:remaining_events, remaining_events)
         |> assign(:page_title, "#{character.name_first}'s Previous Session")
-        |> assign(:bounds, {login, logout})
+        |> assign(:timestamps, {login, logout})
         |> assign(:character, character)
         |> assign(:live?, false)
         |> assign(:loading_more?, true)
