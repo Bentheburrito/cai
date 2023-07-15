@@ -29,10 +29,10 @@ defmodule CAIWeb.ESSComponents do
   def event_item(assigns) do
     ~H"""
     <% log_item_assigns =
-    assigns
-    |> Map.put(:character, @entry.character)
-    |> Map.put(:other, @entry.other)
-    |> Map.put(:event, @entry.event) %>
+      assigns
+      |> Map.put(:character, @entry.character)
+      |> Map.put(:other, @entry.other)
+      |> Map.put(:event, @entry.event) %>
     <%= unless (log = build_event_log_item(log_item_assigns, @entry.event, @entry.character.character_id)) == "" do %>
       <div
         id={@id}
@@ -46,7 +46,9 @@ defmodule CAIWeb.ESSComponents do
         <.hover_timestamp id={"#{@id}-timestamp"} unix_timestamp={@entry.event.timestamp} />
         <%= log %>
         <span :if={@entry.count > 1}>(x<%= @entry.count %>)</span>
-        <span :if={not match?([], @entry.bonuses)}>[Bonuses: <%= Enum.map_join(@entry.bonuses, ", ", &CAI.xp()[&1.experience_id]["description"]) %>]</span>
+        <span :if={not match?([], @entry.bonuses)}>
+          [Bonuses: <%= Enum.map_join(@entry.bonuses, ", ", &CAI.xp()[&1.experience_id]["description"]) %>]
+        </span>
       </div>
     <% end %>
     """
@@ -59,11 +61,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Suicide
-  def build_event_log_item(
-        assigns,
-        %Death{character_id: char_id, attacker_character_id: char_id},
-        _c_id
-      ) do
+  def build_event_log_item(assigns, %Death{character_id: char_id, attacker_character_id: char_id}, _c_id) do
     ~H"""
     <%= link_character(@character, @event.team_id) %> died of their own accord with <%= get_weapon_name(
       @event.attacker_weapon_id,
@@ -74,10 +72,10 @@ defmodule CAIWeb.ESSComponents do
 
   def build_event_log_item(assigns, %Death{}, _c_id) do
     ~H"""
-    <%= link_character((if @character.character_id == @event.character_id, do: @other, else: @character), @event.attacker_team_id) %>
-    killed
-    <%= link_character((if @character.character_id == @event.character_id, do: @character, else: @other), @event.team_id) %>
-    with <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
+    <% {attacker, character} =
+      if @character.character_id == @event.character_id, do: {@other, @character}, else: {@character, @other} %>
+    <%= link_character(attacker, @event.attacker_team_id) %> killed <%= link_character(character, @event.team_id) %> with
+    <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
     <%= (@event.is_headshot && "(headshot)") || "" %>
     """
   end
@@ -165,36 +163,27 @@ defmodule CAIWeb.ESSComponents do
 
   def build_event_log_item(assigns, %VehicleDestroy{}, _c_id) do
     ~H"""
-    <%= link_character((if @character.character_id == @event.character_id, do: @other, else: @character), @event.attacker_team_id) %>
-    destroyed
-    <%= link_character((@character.character_id == @event.character_id && @character) || @other, @event.team_id, true) %>
-    <%= CAI.vehicles()[@event.vehicle_id]["name"] %> with <%= get_weapon_name(
-      @event.attacker_weapon_id,
-      @event.attacker_vehicle_id
-    ) %>
+    <% {attacker, character} =
+      if @character.character_id == @event.character_id, do: {@other, @character}, else: {@character, @other} %>
+    <%= link_character(attacker, @event.attacker_team_id) %> destroyed
+    <%= link_character(character, @event.team_id, true) %>
+    <%= CAI.vehicles()[@event.vehicle_id]["name"] %> with
+    <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
     <%= (@event.attacker_vehicle_id != 0 &&
            " while in a #{CAI.vehicles()[@event.attacker_vehicle_id]["name"]}") || "" %>
     """
   end
 
   # Kill assist
-  def build_event_log_item(
-        assigns,
-        %GainExperience{experience_id: id, character_id: char_id},
-        char_id
-      )
+  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
       when is_assist_xp(id) do
     ~H"""
-    <%= link_character(@character) %> assisted in killing <%= link_character(@other) %>
+    <%= link_character(@character, @event.team_id) %> assisted in killing <%= link_character(@other) %>
     """
   end
 
   # Got revived by someone
-  def build_event_log_item(
-        assigns,
-        %GainExperience{experience_id: id, other_id: char_id},
-        char_id
-      )
+  def build_event_log_item(assigns, %GainExperience{experience_id: id, other_id: char_id}, char_id)
       when is_revive_xp(id) do
     ~H"""
     <%= link_character(@other) %> revived <%= link_character(@character) %>
@@ -202,11 +191,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Revived someone
-  def build_event_log_item(
-        assigns,
-        %GainExperience{experience_id: id, character_id: char_id},
-        char_id
-      )
+  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
       when is_revive_xp(id) do
     ~H"""
     <%= link_character(@character) %> revived <%= link_character(@other) %>
@@ -214,11 +199,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Gunner gets a kill
-  def build_event_log_item(
-        assigns,
-        %GainExperience{experience_id: id, character_id: char_id},
-        char_id
-      )
+  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
       when is_gunner_assist_xp(id) do
     %{"description" => desc} = CAI.xp()[id]
     desc_downcase = String.downcase(desc)
@@ -246,9 +227,9 @@ defmodule CAIWeb.ESSComponents do
     ~H"""
     <%= cond do %>
       <% @vehicle_killed -> %>
-        <%= link_character(@character, true) %> <%= @vehicle_killer %> gunner destroyed a <%= @vehicle_killed %>
+        <%= link_character(@character, @event.team_id, true) %> <%= @vehicle_killer %> gunner destroyed a <%= @vehicle_killed %>
       <% @vehicle_killer -> %>
-        <%= link_character(@character, true) %> <%= @vehicle_killer %> gunner killed <%= link_character(@other) %>
+        <%= link_character(@character, @event.team_id, true) %> <%= @vehicle_killer %> gunner killed <%= link_character(@other) %>
       <% :else -> %>
         <%= @desc_downcase %>
     <% end %>
@@ -256,11 +237,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   @ctf_flag_cap 2133
-  def build_event_log_item(
-        assigns,
-        %GainExperience{experience_id: @ctf_flag_cap, character_id: char_id} = ge,
-        char_id
-      ) do
+  def build_event_log_item(assigns, %GainExperience{experience_id: @ctf_flag_cap, character_id: char_id} = ge, char_id) do
     assigns = Map.put(assigns, :team_id, ge.team_id)
 
     ~H"""
@@ -298,8 +275,7 @@ defmodule CAIWeb.ESSComponents do
   @priority_kill 279
   def build_event_log_item(assigns, %GainExperience{experience_id: @priority_kill}, _c_id) do
     ~H"""
-    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %>
-    killed a priority target,
+    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> killed a priority target,
     <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %>
     """
   end
@@ -307,8 +283,7 @@ defmodule CAIWeb.ESSComponents do
   @priority_kill_assist 371
   def build_event_log_item(assigns, %GainExperience{experience_id: @priority_kill_assist}, _c_id) do
     ~H"""
-    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %>
-    assisted in killing a priority target,
+    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> assisted in killing a priority target,
     <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %>
     """
   end
@@ -362,11 +337,11 @@ defmodule CAIWeb.ESSComponents do
   end
 
   defp link_character({:unavailable, npc_id}, _team_id, _) do
-
     if npc_id == 0 do
       ""
     else
       assigns = %{npc_id: npc_id}
+
       ~H"""
       <span title={"NPC ID #{@npc_id}"}>a vehicle</span>
       """
