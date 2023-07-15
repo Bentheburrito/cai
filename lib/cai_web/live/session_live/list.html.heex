@@ -1,6 +1,13 @@
 <.character_header character={assigns[:character]} />
 
 <div :if={assigns[:streams][:sessions]}>
+  <.button
+    :if={@online?}
+    class="border-solid border-2 m-1 rounded-2xl border-gray-400"
+    phx-click={JS.navigate(~p"/sessions/#{@character.character_id}/show")}
+  >
+    <span class="animate-slow-blink">🔴</span> <%= @character.name_first %> is currently online
+  </.button>
   <h3 class="m-2">
     Historical Sessions
   </h3>
