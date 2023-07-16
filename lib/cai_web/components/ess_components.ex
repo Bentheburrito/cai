@@ -260,25 +260,8 @@ defmodule CAIWeb.ESSComponents do
   @heal 4
   def build_event_log_item(assigns, %GainExperience{experience_id: @heal}, _c_id) do
     ~H"""
-    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> healed <%= link_character(
-      if @character.character_id == @event.character_id, do: @other, else: @character
-    ) %>
-    """
-  end
-
-  @revenge_kill 11
-  def build_event_log_item(assigns, %GainExperience{experience_id: @revenge_kill}, _c_id) do
-    ~H"""
-    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> got revenge on
-    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %>
-    """
-  end
-
-  @priority_kill 279
-  def build_event_log_item(assigns, %GainExperience{experience_id: @priority_kill}, _c_id) do
-    ~H"""
-    <%= link_character(if @character.character_id == @event.character_id, do: @character, else: @other) %> killed a priority target,
-    <%= link_character(if @character.character_id == @event.character_id, do: @other, else: @character) %>
+    <% {healer, healed} = if @character.character_id == @event.character_id, do: {@character, @other}, else: {@other, @character} %>
+    <%= link_character(healer, @event.team_id) %> healed <%= link_character(healed) %>
     """
   end
 
@@ -362,14 +345,10 @@ defmodule CAIWeb.ESSComponents do
       # Can't actually store these classes in `CAI.factions` because these classes won't be compiled...
       faction_classes:
         case {CAI.factions()[faction_id].alias, team_id} do
-          {"NS", 1} -> "bg-gradient-to-r from-gray-600 to-purple-600 hover:bg-gray-800"
-          {"NS", 2} -> "bg-gradient-to-r from-gray-600 to-blue-600 hover:bg-gray-800"
-          {"NS", 3} -> "bg-gradient-to-r from-gray-600 to-red-500 hover:bg-gray-800"
-          {"NS", _} -> "bg-gray-600 hover:bg-gray-800"
-          {"NSO", 1} -> "bg-gradient-to-r from-gray-600 to-purple-600 hover:bg-gray-800"
-          {"NSO", 2} -> "bg-gradient-to-r from-gray-600 to-blue-600 hover:bg-gray-800"
-          {"NSO", 3} -> "bg-gradient-to-r from-gray-600 to-red-500 hover:bg-gray-800"
-          {"NSO", _} -> "bg-gray-600 hover:bg-gray-800"
+          {"NS" <> _, 1} -> "bg-gradient-to-r from-gray-600 to-purple-600 hover:bg-gray-800"
+          {"NS" <> _, 2} -> "bg-gradient-to-r from-gray-600 to-blue-600 hover:bg-gray-800"
+          {"NS" <> _, 3} -> "bg-gradient-to-r from-gray-600 to-red-500 hover:bg-gray-800"
+          {"NS" <> _, _} -> "bg-gray-600 hover:bg-gray-800"
           {"NC", _} -> "bg-blue-600 hover:bg-blue-800"
           {"VS", _} -> "bg-purple-600 hover:bg-purple-800"
           {"TR", _} -> "bg-red-500 hover:bg-red-800"
