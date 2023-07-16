@@ -53,6 +53,43 @@ defmodule CAI do
   def revive_xp_ids, do: @revive_xp_ids
   defguard is_revive_xp(id) when id in @revive_xp_ids
 
+  def xp_icon(id, team_id)
+  # kill streak
+  def xp_icon(8, _team_id), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/92995.png")}
+  # domination
+  def xp_icon(10, _team_id), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/11874.png")}
+  # revenge
+  def xp_icon(11, _team_id), do: {:ok, "/images/11874_red.png"}
+  # nemesis
+  def xp_icon(32, _team_id), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/14229.png")}
+  # spot kill
+  # def xp_icon(36, _team_id), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/84758.png")}
+  # spot kill alt 1
+  def xp_icon(36, _team_id), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/14692.png")}
+  # spot kill alts 2
+  # def xp_icon(36, 1), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/12634.png")}
+  # def xp_icon(36, 2), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/12628.png")}
+  # def xp_icon(36, 3), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/12631.png")}
+  # def xp_icon(36, team_id) when team_id in [0, 4], do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/12637.png")}
+  # headshot
+  def xp_icon(37, _team_id), do: {:ok, "/images/77759_cropped.png"}
+  # headshot alt 1
+  # def xp_icon(37, _team_id), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/12483.png")}
+  # headshot alts 2
+  # def xp_icon(37, 1), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/11467.png")}
+  # def xp_icon(37, 2), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/11464.png")}
+  # def xp_icon(37, 3), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/11461.png")}
+  # stop kill streak
+  def xp_icon(38, _team_id), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/2609.png")}
+  # priority
+  def xp_icon(278, _team_id), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/14985.png")}
+  # high priority
+  def xp_icon(279, _team_id), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/14985.png")}
+  # bounty kill bonus
+  def xp_icon(593, _team_id), do: {:ok, "/images/92995_red_cropped.png"}
+
+  def xp_icon(_, _), do: :noop
+
   @weapons CAI.Scripts.load_static_file(@json_cache_path <> "/weapons.json")
   def weapons, do: @weapons
 

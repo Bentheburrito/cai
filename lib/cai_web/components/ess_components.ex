@@ -46,9 +46,15 @@ defmodule CAIWeb.ESSComponents do
         <.hover_timestamp id={"#{@id}-timestamp"} unix_timestamp={@entry.event.timestamp} />
         <%= log %>
         <span :if={@entry.count > 1}>(x<%= @entry.count %>)</span>
-        <span :if={not match?([], @entry.bonuses)}>
-          [Bonuses: <%= Enum.map_join(@entry.bonuses, ", ", &CAI.xp()[&1.experience_id]["description"]) %>]
-        </span>
+        <%= for ge <- @entry.bonuses, {:ok, icon_url} <- [CAI.xp_icon(ge.experience_id, ge.team_id)] do %>
+          <img
+            src={icon_url}
+            alt={CAI.xp()[ge.experience_id]["description"]}
+            title={"#{CAI.xp()[ge.experience_id]["description"]}, #{ge.amount} XP"}
+            class="inline object-contain h-8"
+          />
+        <% end %>
+
       </div>
     <% end %>
     """
@@ -76,7 +82,6 @@ defmodule CAIWeb.ESSComponents do
       if @character.character_id == @event.character_id, do: {@other, @character}, else: {@character, @other} %>
     <%= link_character(attacker, @event.attacker_team_id) %> killed <%= link_character(character, @event.team_id) %> with
     <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
-    <%= (@event.is_headshot && "(headshot)") || "" %>
     """
   end
 
