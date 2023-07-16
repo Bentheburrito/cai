@@ -30,7 +30,7 @@ defmodule CAIWeb.SessionLive.List do
       end
 
       # first element of timestamps list, 2nd element of the tuple is the logout timestamp
-      latest_timestamp = get_in(timestamps, [Access.at(0), Access.elem(1)])
+      latest_timestamp = get_in(timestamps, [Access.at(0), Access.elem(1)]) || 0
       recent? = latest_timestamp > :os.system_time(:second) - (Session.session_timeout_mins * 60)
       logout? =
         PlayerLogout

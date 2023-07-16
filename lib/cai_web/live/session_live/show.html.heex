@@ -15,9 +15,6 @@
   <div class="border-solid border-4 m-1 p-2 rounded-2xl border-gray-400">
     <span id="live-event-feed" phx-update="stream">
       <.event_item :for={{dom_id, entry} <- @streams.events} entry={entry} id={dom_id} />
-      <%!-- <span :if={need a way to show this if the stream is empty} class="italic">
-        In-game events will be displayed here as they occur
-      </span> --%>
     </span>
     <%!-- pattern matching against empty list, since `length/1` is O(n) --%>
     <span

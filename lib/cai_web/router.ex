@@ -20,6 +20,7 @@ defmodule CAIWeb.Router do
     get("/", PageController, :home)
 
     live_session :sessions do
+      live("/sessions", SessionLive, :search)
       live("/sessions/:character_id", SessionLive.List, :list)
       live("/sessions/:character_id/show", SessionLive.Show, :show)
     end
