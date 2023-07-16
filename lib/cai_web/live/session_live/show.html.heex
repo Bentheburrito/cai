@@ -3,8 +3,10 @@
 <div :if={not @live?}>
   <% {login, logout} = @timestamps %>
   <h3 class="m-2">
-    Session from <.timestamp id="session-login" unix_timestamp={login} /> to
-    <.timestamp id="session-logout" unix_timestamp={logout} />
+    Session from <.timestamp id="session-login" unix_timestamp={login} class="font-bold"/> to
+    <.timestamp id="session-logout" unix_timestamp={logout} class="font-bold"/>
+    <br>
+    Lasted <span class="font-bold"><%= format_duration(login, logout) %></span>
   </h3>
 </div>
 

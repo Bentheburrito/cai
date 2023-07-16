@@ -589,10 +589,11 @@ defmodule CAIWeb.CoreComponents do
   """
   attr(:id, :string, required: true)
   attr(:unix_timestamp, :integer, required: true)
+  attr(:class, :string, default: nil)
 
   def timestamp(assigns) do
     ~H"""
-    <span id={@id} phx-hook="FormatTimestamp" class="italic"><%= @unix_timestamp %></span>
+    <span id={@id} phx-hook="FormatTimestamp" class={"italic #{@class}"}><%= @unix_timestamp %></span>
     """
   end
 
