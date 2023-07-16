@@ -54,8 +54,7 @@ defmodule CAI.Scripts do
 
     weapon_map =
       for line <- lines, into: %{} do
-        [item_id, category, is_vehicle_weapon, item_name, faction_id, sanction] =
-          String.split(line, ",")
+        [item_id, category, is_vehicle_weapon, item_name, faction_id, sanction] = String.split(line, ",")
 
         # Replace excessive quotation
         item_name =
@@ -88,9 +87,7 @@ defmodule CAI.Scripts do
 
   def get_and_dump_vehicles do
     res =
-      HTTPoison.get!(
-        "https://raw.githubusercontent.com/cooltrain7/Planetside-2-API-Tracker/master/Census/vehicle.json"
-      )
+      HTTPoison.get!("https://raw.githubusercontent.com/cooltrain7/Planetside-2-API-Tracker/master/Census/vehicle.json")
 
     res_map = Jason.decode!(res.body)
 

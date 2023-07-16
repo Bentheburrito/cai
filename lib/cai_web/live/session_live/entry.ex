@@ -30,7 +30,7 @@ defmodule CAIWeb.SessionLive.Entry do
   @doc """
   Create a new Entry struct
   """
-  @spec new(event :: map(), character :: Character.t(), other :: Character.t() | :none, integer(), list(map())) :: Entry.t()
+  @spec new(event :: map(), character :: Character.t(), other :: Character.t() | :none, integer(), [map()]) :: Entry.t()
   def new(event, character, other \\ :none, count \\ 1, bonuses \\ []) do
     %Entry{event: event, character: character, other: other, count: count, bonuses: bonuses}
   end
@@ -45,7 +45,9 @@ defmodule CAIWeb.SessionLive.Entry do
       acc ->
         # If we didn't find a death associated with these bonuses, just put the bonuses back as regular entries.
         if is_nil(d) do
-          other = Helpers.get_other_character(character.character_id, List.first(bonuses), &Map.fetch(other_char_map, &1))
+          other =
+            Helpers.get_other_character(character.character_id, List.first(bonuses), &Map.fetch(other_char_map, &1))
+
           Enum.map(bonuses, &new(&1, character, other)) ++ acc
         else
           other = Helpers.get_other_character(character.character_id, d, &Map.fetch(other_char_map, &1))
@@ -80,17 +82,21 @@ defmodule CAIWeb.SessionLive.Entry do
 
   # entry point
   defp map([e | init_events], character, other_char_map) do
-    other =
-      Helpers.get_other_character(character.character_id, e, &Map.fetch(other_char_map, &1))
+    other = Helpers.get_other_character(character.character_id, e, &Map.fetch(other_char_map, &1))
 
-      map([new(e, character, other)], init_events, character, other_char_map)
-    end
+    map([new(e, character, other)], init_events, character, other_char_map)
+  end
 
   # exit condition (no remaining events)
   defp map(mapped, [], _character, _other_char_map), do: mapped
 
   # when the prev_e and e timestamps match, let's check for a group of GEs + corresponding Death and condense them
-  defp map([%Entry{event: %{timestamp: t} = prev_e} | mapped], [%{timestamp: t} = e | rem_events], character, other_char_map) do
+  defp map(
+         [%Entry{event: %{timestamp: t} = prev_e} | mapped],
+         [%{timestamp: t} = e | rem_events],
+         character,
+         other_char_map
+       ) do
     # grouped_map looks like %{{timestamp, attacker_id, char_id} => %{death: %Death{}, supplemental: [%GE{}]}}
     {new_mapped, remaining} =
       condense_deaths_and_bonuses([prev_e, e | rem_events], mapped, %{}, _target_t = t, character, other_char_map)
@@ -98,7 +104,12 @@ defmodule CAIWeb.SessionLive.Entry do
     map(new_mapped, remaining, character, other_char_map)
   end
 
-  defp map([%Entry{event: prev_e1} = prev_entry1, %Entry{event: prev_e2, count: prev_count} = prev_entry2 | mapped], [e | rem_events], character, other_char_map) do
+  defp map(
+         [%Entry{event: prev_e1} = prev_entry1, %Entry{event: prev_e2, count: prev_count} = prev_entry2 | mapped],
+         [e | rem_events],
+         character,
+         other_char_map
+       ) do
     if Helpers.consecutive?(prev_e1, prev_e2) do
       map([%Entry{prev_entry2 | count: prev_count + 1} | mapped], [e | rem_events], character, other_char_map)
     else
@@ -118,7 +129,15 @@ defmodule CAIWeb.SessionLive.Entry do
   end
 
   # If timestamps are different, we're done here
-  defp condense_deaths_and_bonuses([%{timestamp: t} | _] = rem_events, mapped, grouped, target_t, character, other_char_map) when t != target_t do
+  defp condense_deaths_and_bonuses(
+         [%{timestamp: t} | _] = rem_events,
+         mapped,
+         grouped,
+         target_t,
+         character,
+         other_char_map
+       )
+       when t != target_t do
     apply_grouped(rem_events, mapped, grouped, character, other_char_map)
   end
 
@@ -128,23 +147,25 @@ defmodule CAIWeb.SessionLive.Entry do
     case event do
       # put the death event for a grouped entry
       %Death{} ->
-        new_grouped = Map.update(
-          grouped,
-          {event.timestamp, event.attacker_character_id, event.character_id},
-          %{death: event, bonuses: []},
-          &Map.put(&1, :death, event)
-        )
+        new_grouped =
+          Map.update(
+            grouped,
+            {event.timestamp, event.attacker_character_id, event.character_id},
+            %{death: event, bonuses: []},
+            &Map.put(&1, :death, event)
+          )
 
         condense_deaths_and_bonuses(rem_events, mapped, new_grouped, target_t, character, other_char_map)
 
       # put a bonus event for a grouped entry
       %GainExperience{experience_id: id} when is_kill_xp(id) ->
-        new_grouped = Map.update(
-          grouped,
-          {event.timestamp, event.character_id, event.other_id},
-          %{death: nil, bonuses: [event]},
-          &Map.update!(&1, :bonuses, fn bonuses -> [event | bonuses] end)
-        )
+        new_grouped =
+          Map.update(
+            grouped,
+            {event.timestamp, event.character_id, event.other_id},
+            %{death: nil, bonuses: [event]},
+            &Map.update!(&1, :bonuses, fn bonuses -> [event | bonuses] end)
+          )
 
         condense_deaths_and_bonuses(rem_events, mapped, new_grouped, target_t, character, other_char_map)
 

@@ -229,7 +229,9 @@ defmodule CAIWeb.ESSComponents do
       <% @vehicle_killed -> %>
         <%= link_character(@character, @event.team_id, true) %> <%= @vehicle_killer %> gunner destroyed a <%= @vehicle_killed %>
       <% @vehicle_killer -> %>
-        <%= link_character(@character, @event.team_id, true) %> <%= @vehicle_killer %> gunner killed <%= link_character(@other) %>
+        <%= link_character(@character, @event.team_id, true) %> <%= @vehicle_killer %> gunner killed <%= link_character(
+          @other
+        ) %>
       <% :else -> %>
         <%= @desc_downcase %>
     <% end %>

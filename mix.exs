@@ -51,7 +51,7 @@ defmodule CAI.MixProject do
       {:planetside_api, "~> 0.3.0"},
       {:dotenv_parser, "~> 1.2"},
       {:cachex, "~> 3.6"},
-      {:credo, "~> 1.6", only: [:dev, :test, :github], runtime: false},
+      {:credo, "~> 1.6", only: [:dev, :test, :github], runtime: false}
     ]
   end
 
