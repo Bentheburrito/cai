@@ -26,7 +26,8 @@ defmodule CAI.ESS.Client do
     PS2.battle_rank_up() => ESS.BattleRankUp,
     PS2.metagame_event() => ESS.MetagameEvent,
     PS2.continent_lock() => ESS.ContinentLock,
-    PS2.continent_unlock() => ESS.ContinentUnlock
+    PS2.continent_unlock() => ESS.ContinentUnlock,
+    PS2.facility_control() => ESS.FacilityControl,
   }
 
   @heartbeat PS2.server_health_update()

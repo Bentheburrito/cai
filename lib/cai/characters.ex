@@ -10,12 +10,13 @@ defmodule CAI.Characters do
 
   alias Ecto.Changeset
   alias CAI.Repo
-  alias CAI.Characters.{Character, Session}
+  alias CAI.Characters.{Character, Outfit, Session}
   alias PS2.API, as: Census
   alias PS2.API.{Query, QueryResult}
 
   alias CAI.ESS.{
     Death,
+    FacilityControl,
     GainExperience,
     PlayerFacilityCapture,
     PlayerFacilityDefend,
@@ -75,7 +76,7 @@ defmodule CAI.Characters do
     case Cachex.get(:character_name_map, name_lower) do
       {:ok, nil} ->
         query = term(@query_base, "name.first_lower", name_lower)
-        fetch_by_query(query)
+        fetch_by_query(query, &put_character_in_caches/1)
 
       {:ok, character_id} ->
         fetch(character_id)
@@ -90,7 +91,7 @@ defmodule CAI.Characters do
     else
       {:ok, nil} ->
         query = term(@query_base, "character_id", character_id)
-        fetch_by_query(query)
+        fetch_by_query(query, &put_character_in_caches/1)
 
       {:error, _} ->
         Logger.error("Could not access :character_cache")
@@ -104,37 +105,57 @@ defmodule CAI.Characters do
   end
 
   @doc """
-  Runs the given character Census query, updating caches and parsing the result into a `Character` struct.
+  Runs the given Census query, optionally transforming the result with the `map_to/1` parameter.
 
   Defaults to a maximum of #{@default_census_attempts} attempts. Returns the same as `fetch/1`.
   """
-  @spec fetch_by_query(Query.t(), integer()) :: {:ok, Character.t()} | :not_found | :error
-  def fetch_by_query(query, remaining_tries \\ @default_census_attempts)
+  @spec fetch_by_query(Query.t(), (any() -> any()), integer()) :: {:ok, Character.t()} | :not_found | :error
+  def fetch_by_query(query, map_to \\ & &1, remaining_tries \\ @default_census_attempts)
 
-  def fetch_by_query(_query, remaining_tries) when remaining_tries == 0 do
+  def fetch_by_query(_query, _map_to, remaining_tries) when remaining_tries == 0 do
     Logger.error("remaining_tries == 0, returning :error")
     :error
   end
 
-  def fetch_by_query(query, remaining_tries) do
-    with {:ok, %QueryResult{data: data, returned: returned}} when returned > 0 <- Census.query_one(query, CAI.sid()),
-         {:ok, char} <- %Character{} |> Character.changeset(data) |> Changeset.apply_action(:update) do
-      Cachex.put(:character_cache, char.character_id, char, @put_opts)
-      Cachex.put(:character_name_map, char.name_first_lower, char.character_id, @put_opts)
-      {:ok, char}
-    else
+  def fetch_by_query(query, map_to, remaining_tries) do
+    case Census.query_one(query, CAI.sid()) do
+      {:ok, %QueryResult{data: data, returned: returned}} when returned > 0 ->
+        {:ok, map_to.(data)}
+
       {:ok, %QueryResult{returned: 0}} ->
         :not_found
+
+      {:error, e} ->
+        Logger.warning("CharacterCache query returned error (#{remaining_tries - 1} attempts remain): #{inspect(e)}")
+
+        fetch_by_query(query, map_to, remaining_tries - 1)
+    end
+  end
+
+  defp put_character_in_caches(data) do
+    case %Character{} |> Character.changeset(data) |> Changeset.apply_action(:update) do
+      {:ok, char} ->
+        Cachex.put(:character_cache, char.character_id, char, @put_opts)
+        Cachex.put(:character_name_map, char.name_first_lower, char.character_id, @put_opts)
+        char
 
       {:error, %Changeset{} = changeset} ->
         Logger.error("Could not parse census character response into a Character struct: #{inspect(changeset.errors)}")
 
         :error
+    end
+  end
 
-      {:error, e} ->
-        Logger.warning("CharacterCache query returned error (#{remaining_tries - 1} attempts remain): #{inspect(e)}")
+  defp put_outfit_in_cache(data) do
+    case %Outfit{} |> Outfit.changeset(data) |> Changeset.apply_action(:update) do
+      {:ok, outfit} ->
+        Cachex.put(:outfit_cache, outfit.outfit_id, outfit, ttl: round(@cache_ttl_ms / 2))
+        outfit
 
-        fetch_by_query(query, remaining_tries - 1)
+      {:error, %Changeset{} = changeset} ->
+        Logger.error("Could not parse census outfit response into an Outfit struct: #{inspect(changeset.errors)}")
+
+        :error
     end
   end
 
@@ -226,6 +247,26 @@ defmodule CAI.Characters do
   end
 
   @doc """
+  Get an outfit by its ID.
+  """
+  def fetch_outfit(outfit_id) when is_integer(outfit_id) do
+    case Cachex.get(:outfit_cache, outfit_id) do
+      {:ok, %Outfit{} = outfit} ->
+        {:ok, %Outfit{} = outfit}
+
+      {:ok, nil} ->
+        Query.new(collection: "outfit")
+        |> term("outfit_id", outfit_id)
+        |> lang("en")
+        |> fetch_by_query(&put_outfit_in_cache/1)
+
+      {:error, _} ->
+        Logger.error("Could not access :outfit_cache")
+        :error
+    end
+  end
+
+  @doc """
   Get an ordered list of all events in a session.
 
   This function builds a session from the given character_id and login/logout timestamps, then iterates through its
@@ -249,10 +290,17 @@ defmodule CAI.Characters do
         ) :: [map()] | {:error, Ecto.Changeset.t()}
   def get_session_history(character_id, login, logout, _cache? \\ true) do
     with {:ok, session} <- Session.build(character_id, login, logout) do
+      {world_id, zone_ids, facility_ids} =
+        (Map.get(session, :player_facility_captures, []) ++ Map.get(session, :player_facility_defends, []))
+        |> Enum.reduce({nil, MapSet.new(), MapSet.new()}, fn event, {_, zone_ids, facility_ids} ->
+          {event.world_id, MapSet.put(zone_ids, event.zone_id), MapSet.put(facility_ids, event.facility_id)}
+        end)
+
       [
         :battle_rank_ups,
         :deaths,
         :gain_experiences,
+        :facility_control,
         :player_facility_captures,
         :player_facility_defends,
         :vehicle_destroys,
@@ -267,6 +315,19 @@ defmodule CAI.Characters do
             {:ok, event} -> [event | event_list]
             _ -> event_list
           end
+
+        # Instead of storing facility_control events on a Session, let's just make another query here
+        :facility_control, event_list when not is_nil(world_id) ->
+          FacilityControl
+          |> where([fc], fc.timestamp >= ^login and fc.timestamp <= ^logout)
+          |> where([fc], fc.world_id == ^world_id)
+          |> where([fc], fc.zone_id in ^MapSet.to_list(zone_ids))
+          |> where([fc], fc.facility_id in ^MapSet.to_list(facility_ids))
+          |> Repo.all()
+          |> Kernel.++(event_list)
+
+        :facility_control, event_list ->
+          event_list
 
         field, acc ->
           Enum.reduce(Map.fetch!(session, field), acc, fn event, event_list ->

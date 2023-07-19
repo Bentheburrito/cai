@@ -16,6 +16,9 @@ defmodule CAIWeb.SessionLive.Entry do
 
   import CAI, only: [is_kill_xp: 1]
 
+  alias CAI.ESS.FacilityControl
+  alias CAI.ESS.PlayerFacilityCapture
+  alias CAI.ESS.PlayerFacilityDefend
   alias CAI.Characters
   alias CAI.ESS.{GainExperience, Death}
 
@@ -163,6 +166,30 @@ defmodule CAIWeb.SessionLive.Entry do
           Map.update(
             grouped,
             {event.timestamp, event.character_id, event.other_id},
+            %{death: nil, bonuses: [event]},
+            &Map.update!(&1, :bonuses, fn bonuses -> [event | bonuses] end)
+          )
+
+        condense_deaths_and_bonuses(rem_events, mapped, new_grouped, target_t, character, other_char_map)
+
+      # put a player facility cap/def event for a grouped entry
+      %mod{} when mod in [PlayerFacilityCapture, PlayerFacilityDefend] ->
+        new_grouped =
+          Map.update(
+            grouped,
+            {event.timestamp, event.world_id, event.zone_id, event.facility_id},
+            %{death: event, bonuses: []},
+            &Map.put(&1, :death, event)
+          )
+
+        condense_deaths_and_bonuses(rem_events, mapped, new_grouped, target_t, character, other_char_map)
+
+      # put a facility control for a grouped entry
+      %FacilityControl{} ->
+        new_grouped =
+          Map.update(
+            grouped,
+            {event.timestamp, event.world_id, event.zone_id, event.facility_id},
             %{death: nil, bonuses: [event]},
             &Map.update!(&1, :bonuses, fn bonuses -> [event | bonuses] end)
           )

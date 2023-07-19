@@ -146,4 +146,25 @@ defmodule CAI do
 
   def character_id?(id), do: is_character_id(id)
   def npc_id?(id), do: is_npc_id(id)
+
+  def ess_subscriptions do
+    [
+      events: [
+        PS2.gain_experience(),
+        PS2.death(),
+        PS2.vehicle_destroy(),
+        PS2.player_login(),
+        PS2.player_logout(),
+        PS2.player_facility_capture(),
+        PS2.player_facility_defend(),
+        PS2.battle_rank_up(),
+        PS2.metagame_event(),
+        PS2.continent_unlock(),
+        PS2.continent_lock(),
+        PS2.facility_control()
+      ],
+      worlds: ["all"],
+      characters: ["all"]
+    ]
+  end
 end

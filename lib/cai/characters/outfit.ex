@@ -34,7 +34,7 @@ defmodule CAI.Characters.Outfit do
     outfit
     |> cast(params, @fields)
     # Aliases are apparently not required
-    |> validate_required(@fields |> List.delete(:alias))
+    |> validate_required(@fields |> List.delete(:alias) |> List.delete(:member_since_date))
   end
 
   defp format_census_date(date_string) when date_string in [nil, ""], do: nil

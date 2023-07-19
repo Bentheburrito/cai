@@ -13,6 +13,7 @@ defmodule CAIWeb.ESSComponents do
   alias CAI.ESS.{
     BattleRankUp,
     Death,
+    FacilityControl,
     GainExperience,
     PlayerFacilityCapture,
     PlayerFacilityDefend,
@@ -46,7 +47,7 @@ defmodule CAIWeb.ESSComponents do
         <.hover_timestamp id={"#{@id}-timestamp"} unix_timestamp={@entry.event.timestamp} />
         <%= log %>
         <span :if={@entry.count > 1}>(x<%= @entry.count %>)</span>
-        <%= for ge <- @entry.bonuses, {:ok, icon_url} <- [CAI.xp_icon(ge.experience_id, ge.team_id)] do %>
+        <%= for %GainExperience{} = ge <- @entry.bonuses, {:ok, icon_url} <- [CAI.xp_icon(ge.experience_id, ge.team_id)] do %>
           <img
             src={icon_url}
             alt={CAI.xp()[ge.experience_id]["description"]}
@@ -54,7 +55,15 @@ defmodule CAIWeb.ESSComponents do
             class="inline object-contain h-8"
           />
         <% end %>
-
+        <%= for %FacilityControl{} = fc <- @entry.bonuses do %>
+          <%= if Map.get(@entry.event, :outfit_id) == fc.outfit_id do %>
+            <span>for their outfit, [<%= @character.outfit[:alias] %>]</span>
+          <% else %>
+            <span :for={{:ok, outfit} <- [CAI.Characters.fetch_outfit(fc.outfit_id)]}>
+              for [<%= Map.get(outfit, :alias) %>]
+            </span>
+          <% end %>
+        <% end %>
       </div>
     <% end %>
     """
@@ -89,34 +98,23 @@ defmodule CAIWeb.ESSComponents do
     facility = CAI.facilities()[facility_id]
 
     facility_type_text =
-      if facility["facility_type"] in ["Small Outpost", "Large Outpost"] do
+      if facility["facility_type"] in ["Small Outpost", "Large Outpost", "Large CTF Outpost", "Small CTF Outpost"] do
         ""
       else
         facility["facility_type"]
       end
 
-    # can't do this right now, need outfit ID from FacilityControl events (the one provided here is just the player's
-    # current outfit :/)
-    capturing_outfit = "[outfit unknown]"
-    # if cap.outfit_id == assigns.character.outfit.outfit_id do
-    #   "for #{assigns.character.outfit.name}!"
-    # else
-    #   ""
-    # end
-
     assigns =
       Map.merge(
         %{
           facility: facility,
-          facility_type: facility_type_text,
-          capturing_outfit: capturing_outfit
+          facility_type: facility_type_text
         },
         assigns
       )
 
     ~H"""
     <%= link_character(@character) %> captured <%= "#{@facility["facility_name"] || "a facility"} #{@facility_type}" %>
-    <%= @capturing_outfit %>
     """
   end
 
@@ -124,32 +122,23 @@ defmodule CAIWeb.ESSComponents do
     facility = CAI.facilities()[facility_id]
 
     facility_type_text =
-      if facility["facility_type"] in ["Small Outpost", "Large Outpost"] do
+      if facility["facility_type"] in ["Small Outpost", "Large Outpost", "Large CTF Outpost", "Small CTF Outpost"] do
         ""
       else
         facility["facility_type"]
       end
 
-    capturing_outfit = "[outfit unknown]"
-    # if def.outfit_id == assigns.character.outfit.outfit_id do
-    #   "for #{assigns.character.outfit.name}!"
-    # else
-    #   ""
-    # end
-
     assigns =
       Map.merge(
         %{
           facility: facility,
-          facility_type: facility_type_text,
-          capturing_outfit: capturing_outfit
+          facility_type: facility_type_text
         },
         assigns
       )
 
     ~H"""
     <%= link_character(@character) %> defended <%= "#{@facility["facility_name"] || "a facility"} #{@facility_type}" %>
-    <%= @capturing_outfit %>
     """
   end
 
@@ -265,7 +254,8 @@ defmodule CAIWeb.ESSComponents do
   @heal 4
   def build_event_log_item(assigns, %GainExperience{experience_id: @heal}, _c_id) do
     ~H"""
-    <% {healer, healed} = if @character.character_id == @event.character_id, do: {@character, @other}, else: {@other, @character} %>
+    <% {healer, healed} =
+      if @character.character_id == @event.character_id, do: {@character, @other}, else: {@other, @character} %>
     <%= link_character(healer, @event.team_id) %> healed <%= link_character(healed) %>
     """
   end

@@ -5,29 +5,11 @@ defmodule CAI.Application do
 
   @impl true
   def start(_type, _args) do
-    subscriptions = [
-      events: [
-        PS2.gain_experience(),
-        PS2.death(),
-        PS2.vehicle_destroy(),
-        PS2.player_login(),
-        PS2.player_logout(),
-        PS2.player_facility_capture(),
-        PS2.player_facility_defend(),
-        PS2.battle_rank_up(),
-        PS2.metagame_event(),
-        PS2.continent_unlock(),
-        PS2.continent_lock()
-      ],
-      worlds: ["all"],
-      characters: ["all"]
-    ]
-
-    clients = [CAI.ESS.Client]
+    subscriptions = CAI.ess_subscriptions()
 
     ess_opts = [
       subscriptions: subscriptions,
-      clients: clients,
+      clients: [CAI.ESS.Client],
       service_id: CAI.sid()
     ]
 
@@ -43,6 +25,8 @@ defmodule CAI.Application do
       # Start our Cachex caches
       Supervisor.child_spec({Cachex, name: :character_name_map}, id: :character_name_map),
       Supervisor.child_spec({Cachex, name: :character_cache}, id: :character_cache),
+      Supervisor.child_spec({Cachex, name: :facility_cache}, id: :facility_cache),
+      Supervisor.child_spec({Cachex, name: :outfit_cache}, id: :outfit_cache),
       CAI.ESS.Client,
       # Start the ESS Socket
       {PS2.Socket, ess_opts}
