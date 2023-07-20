@@ -53,6 +53,10 @@ defmodule CAI do
   def revive_xp_ids, do: @revive_xp_ids
   defguard is_revive_xp(id) when id in @revive_xp_ids
 
+  @doc """
+  Get the image icon for the given experience_id and team/faction ID
+  """
+  @spec xp_icon(experience_id :: integer(), team_id :: integer()) :: {:ok, image_url :: String.t()} | :noop
   def xp_icon(id, team_id)
   # kill streak
   def xp_icon(8, _team_id), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/92995.png")}

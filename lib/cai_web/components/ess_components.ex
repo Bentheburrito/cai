@@ -47,22 +47,8 @@ defmodule CAIWeb.ESSComponents do
         <.hover_timestamp id={"#{@id}-timestamp"} unix_timestamp={@entry.event.timestamp} />
         <%= log %>
         <span :if={@entry.count > 1}>(x<%= @entry.count %>)</span>
-        <%= for %GainExperience{} = ge <- @entry.bonuses, {:ok, icon_url} <- [CAI.xp_icon(ge.experience_id, ge.team_id)] do %>
-          <img
-            src={icon_url}
-            alt={CAI.xp()[ge.experience_id]["description"]}
-            title={"#{CAI.xp()[ge.experience_id]["description"]}, #{ge.amount} XP"}
-            class="inline object-contain h-8"
-          />
-        <% end %>
-        <%= for %FacilityControl{} = fc <- @entry.bonuses do %>
-          <%= if Map.get(@entry.event, :outfit_id) == fc.outfit_id do %>
-            <span>for their outfit, [<%= @character.outfit[:alias] %>]</span>
-          <% else %>
-            <span :for={{:ok, outfit} <- [CAI.Characters.fetch_outfit(fc.outfit_id)]}>
-              for [<%= Map.get(outfit, :alias) %>]
-            </span>
-          <% end %>
+        <%= for event <- @entry.bonuses do %>
+          <%= render_bonus(assigns, event) %>
         <% end %>
       </div>
     <% end %>
@@ -304,6 +290,34 @@ defmodule CAIWeb.ESSComponents do
   end
 
   def build_event_log_item(_, _, _), do: ""
+
+  defp render_bonus(assigns, %GainExperience{} = ge) do
+    assigns = assign(assigns, :ge, ge)
+
+    ~H"""
+    <img
+      :for={{:ok, icon_url} <- [CAI.xp_icon(@ge.experience_id, @ge.team_id)]}
+      src={icon_url}
+      alt={CAI.xp()[@ge.experience_id]["description"]}
+      title={"#{CAI.xp()[@ge.experience_id]["description"]}, #{@ge.amount} XP"}
+      class="inline object-contain h-8"
+    />
+    """
+  end
+
+  defp render_bonus(assigns, %FacilityControl{} = fc) do
+    assigns = assign(assigns, :fc, fc)
+
+    ~H"""
+    <%= if Map.get(@entry.event, :outfit_id) == @fc.outfit_id do %>
+      <span>for their outfit, [<%= @character.outfit[:alias] %>]</span>
+    <% else %>
+      <span :for={{:ok, outfit} <- [CAI.Characters.fetch_outfit(@fc.outfit_id)]}>
+        for [<%= Map.get(outfit, :alias) %>]
+      </span>
+    <% end %>
+    """
+  end
 
   defp link_character(maybe_character, team_id \\ :same_as_faction, possessive? \\ false)
 

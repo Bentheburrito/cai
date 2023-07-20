@@ -213,21 +213,21 @@ defmodule CAIWeb.SessionLive.Show do
 
   defp handle_enrichable_event(event_cs, socket) do
     event = Ecto.Changeset.apply_changes(event_cs)
-    pending_key = pending_key(event)
+    pending_key = group_key(event)
 
     pending_groups = socket.assigns.pending_groups
 
     if is_map_key(pending_groups, pending_key) do
-      {:noreply, update(socket, :pending_groups, &put_in(&1, [pending_key, :death], event))}
+      {:noreply, update(socket, :pending_groups, &put_in(&1, [pending_key, :event], event))}
     else
       Process.send_after(self(), {:build_entries, pending_key}, @event_pending_delay)
-      {:noreply, update(socket, :pending_groups, &Map.put(&1, pending_key, %{death: event, bonuses: []}))}
+      {:noreply, update(socket, :pending_groups, &Map.put(&1, pending_key, %{event: event, bonuses: []}))}
     end
   end
 
   defp handle_bonus_event(event_cs, socket) do
     event = Ecto.Changeset.apply_changes(event_cs)
-    pending_key = pending_key(event)
+    pending_key = group_key(event)
 
     pending_groups = socket.assigns.pending_groups
 
@@ -236,15 +236,15 @@ defmodule CAIWeb.SessionLive.Show do
       {:noreply, update(socket, :pending_groups, updater)}
     else
       Process.send_after(self(), {:build_entries, pending_key}, @event_pending_delay)
-      {:noreply, update(socket, :pending_groups, &Map.put(&1, pending_key, %{death: nil, bonuses: [event]}))}
+      {:noreply, update(socket, :pending_groups, &Map.put(&1, pending_key, %{event: nil, bonuses: [event]}))}
     end
   end
 
-  defp pending_key(%Death{} = death), do: {death.timestamp, death.attacker_character_id, death.character_id}
-  defp pending_key(%GainExperience{} = ge), do: {ge.timestamp, ge.character_id, ge.other_id}
-  defp pending_key(%PlayerFacilityCapture{} = cap), do: {cap.timestamp, cap.world_id, cap.zone_id, cap.facility_id}
-  defp pending_key(%PlayerFacilityDefend{} = def), do: {def.timestamp, def.world_id, def.zone_id, def.facility_id}
-  defp pending_key(%FacilityControl{} = def), do: {def.timestamp, def.world_id, def.zone_id, def.facility_id}
+  defp group_key(%Death{} = death), do: {death.timestamp, death.attacker_character_id, death.character_id}
+  defp group_key(%GainExperience{} = ge), do: {ge.timestamp, ge.character_id, ge.other_id}
+  defp group_key(%PlayerFacilityCapture{} = cap), do: {cap.timestamp, cap.world_id, cap.zone_id, cap.facility_id}
+  defp group_key(%PlayerFacilityDefend{} = def), do: {def.timestamp, def.world_id, def.zone_id, def.facility_id}
+  defp group_key(%FacilityControl{} = def), do: {def.timestamp, def.world_id, def.zone_id, def.facility_id}
 
   # Given a list of events, this fn tries to split at `preferred_limit`, however, it might take more if events can be
   # grouped together as a single entry.
