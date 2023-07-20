@@ -1,4 +1,7 @@
 defmodule CAIWeb.SessionLive.Show do
+  alias CAI.ESS.FacilityControl
+  alias CAI.ESS.PlayerFacilityCapture
+  alias CAI.ESS.PlayerFacilityDefend
   use CAIWeb, :live_view
 
   import CAI, only: [is_kill_xp: 1]
@@ -66,6 +69,7 @@ defmodule CAIWeb.SessionLive.Show do
         end
 
         PubSub.subscribe(CAI.PubSub, "ess:#{character.character_id}")
+        PubSub.subscribe(CAI.PubSub, "ess:FacilityControl")
       end
 
       {
@@ -123,38 +127,23 @@ defmodule CAIWeb.SessionLive.Show do
     }
   end
 
-  # Live Session - receive a new Death event via PubSub
+  # Live Session - receive a new Death or PlayerFacilityCapture/Defend event via PubSub
+  @enrichable_events [Death, PlayerFacilityCapture, PlayerFacilityDefend]
   @event_pending_delay 1000
   @impl true
-  def handle_info({:event, %Ecto.Changeset{data: %Death{}} = event_cs}, socket) do
-    event = Ecto.Changeset.apply_changes(event_cs)
-    pending_key = {event.timestamp, event.attacker_character_id, event.character_id}
-
-    pending_groups = socket.assigns.pending_groups
-
-    if is_map_key(pending_groups, pending_key) do
-      {:noreply, update(socket, :pending_groups, &put_in(&1, [pending_key, :death], event))}
-    else
-      Process.send_after(self(), {:build_entries, pending_key}, @event_pending_delay)
-      {:noreply, update(socket, :pending_groups, &Map.put(&1, pending_key, %{death: event, bonuses: []}))}
-    end
+  def handle_info({:event, %Ecto.Changeset{data: %mod{}} = event_cs}, socket) when mod in @enrichable_events do
+    handle_enrichable_event(event_cs, socket)
   end
 
   # Live Session - receive a new kill bonus GE event via PubSub
   @impl true
   def handle_info({:event, %Ecto.Changeset{changes: %{experience_id: id}} = event_cs}, socket) when is_kill_xp(id) do
-    event = Ecto.Changeset.apply_changes(event_cs)
-    pending_key = {event.timestamp, event.character_id, event.other_id}
+    handle_bonus_event(event_cs, socket)
+  end
 
-    pending_groups = socket.assigns.pending_groups
-
-    if is_map_key(pending_groups, pending_key) do
-      updater = fn groups -> update_in(groups, [pending_key, :bonuses], &[event | &1]) end
-      {:noreply, update(socket, :pending_groups, updater)}
-    else
-      Process.send_after(self(), {:build_entries, pending_key}, @event_pending_delay)
-      {:noreply, update(socket, :pending_groups, &Map.put(&1, pending_key, %{death: nil, bonuses: [event]}))}
-    end
+  @impl true
+  def handle_info({:event, %Ecto.Changeset{data: %FacilityControl{}} = event_cs}, socket) do
+    handle_bonus_event(event_cs, socket)
   end
 
   # Live Session - receive a new event via PubSub
@@ -189,16 +178,20 @@ defmodule CAIWeb.SessionLive.Show do
   end
 
   @impl true
-  def handle_info({:build_entries, {_, char_id, other_id} = pending_key}, socket) do
+  def handle_info({:build_entries, pending_key}, socket) do
     case Map.fetch(socket.assigns.pending_groups, pending_key) do
       {:ok, group} ->
         character = socket.assigns.character
-        placeholder_event = %GainExperience{character_id: char_id, other_id: other_id}
 
         other_map =
-          case Helpers.get_other_character(character.character_id, placeholder_event) do
-            %Character{} = other -> %{other.character_id => other}
+          with [%{character_id: _} | _] <- group.bonuses,
+               {_, char_id, other_id} = pending_key,
+               placeholder_event = %GainExperience{character_id: char_id, other_id: other_id},
+               %Character{} = other <- Helpers.get_other_character(character.character_id, placeholder_event) do
+            %{other.character_id => other}
+          else
             {:unavailable, other_id} -> %{other_id => {:unavailable, other_id}}
+            _ -> %{}
           end
 
         entries = Entry.from_groups(%{pending_key => group}, [], character, other_map)
@@ -217,6 +210,41 @@ defmodule CAIWeb.SessionLive.Show do
   end
 
   ### HELPERS ###
+
+  defp handle_enrichable_event(event_cs, socket) do
+    event = Ecto.Changeset.apply_changes(event_cs)
+    pending_key = pending_key(event)
+
+    pending_groups = socket.assigns.pending_groups
+
+    if is_map_key(pending_groups, pending_key) do
+      {:noreply, update(socket, :pending_groups, &put_in(&1, [pending_key, :death], event))}
+    else
+      Process.send_after(self(), {:build_entries, pending_key}, @event_pending_delay)
+      {:noreply, update(socket, :pending_groups, &Map.put(&1, pending_key, %{death: event, bonuses: []}))}
+    end
+  end
+
+  defp handle_bonus_event(event_cs, socket) do
+    event = Ecto.Changeset.apply_changes(event_cs)
+    pending_key = pending_key(event)
+
+    pending_groups = socket.assigns.pending_groups
+
+    if is_map_key(pending_groups, pending_key) do
+      updater = fn groups -> update_in(groups, [pending_key, :bonuses], &[event | &1]) end
+      {:noreply, update(socket, :pending_groups, updater)}
+    else
+      Process.send_after(self(), {:build_entries, pending_key}, @event_pending_delay)
+      {:noreply, update(socket, :pending_groups, &Map.put(&1, pending_key, %{death: nil, bonuses: [event]}))}
+    end
+  end
+
+  defp pending_key(%Death{} = death), do: {death.timestamp, death.attacker_character_id, death.character_id}
+  defp pending_key(%GainExperience{} = ge), do: {ge.timestamp, ge.character_id, ge.other_id}
+  defp pending_key(%PlayerFacilityCapture{} = cap), do: {cap.timestamp, cap.world_id, cap.zone_id, cap.facility_id}
+  defp pending_key(%PlayerFacilityDefend{} = def), do: {def.timestamp, def.world_id, def.zone_id, def.facility_id}
+  defp pending_key(%FacilityControl{} = def), do: {def.timestamp, def.world_id, def.zone_id, def.facility_id}
 
   # Given a list of events, this fn tries to split at `preferred_limit`, however, it might take more if events can be
   # grouped together as a single entry.

@@ -126,7 +126,7 @@ defmodule CAI.Characters do
         :not_found
 
       {:error, e} ->
-        Logger.warning("CharacterCache query returned error (#{remaining_tries - 1} attempts remain): #{inspect(e)}")
+        Logger.warning("fetch_by_query returned error (#{remaining_tries - 1} attempts remain): #{inspect(e)}")
 
         fetch_by_query(query, map_to, remaining_tries - 1)
     end
