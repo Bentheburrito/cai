@@ -122,7 +122,7 @@ defmodule CAI.Scripts do
     end
 
     {:ok, %PS2.API.QueryResult{data: xp_list}} =
-      PS2.API.query(Query.new(collection: "experience") |> limit(5000), "example")
+      PS2.API.query(Query.new(collection: "experience") |> limit(5000), CAI.sid())
 
     new_xp_map =
       for %{"description" => desc} = xp_map <- xp_list,
@@ -160,6 +160,13 @@ defmodule CAI.Scripts do
   end
 
   def load_static_file(path) do
+    unless File.exists?(path) do
+      get_and_dump_facilities()
+      get_and_dump_vehicles()
+      get_and_dump_weapons()
+      get_and_dump_xp()
+    end
+
     path
     |> File.read!()
     |> Jason.decode!()
