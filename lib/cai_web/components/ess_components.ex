@@ -326,7 +326,7 @@ defmodule CAIWeb.ESSComponents do
     assigns = %{character_id: character_id, possessive: (possessive? && "'s") || ""}
 
     ~H"""
-    <.link patch={~p"/sessions/#{@character_id}"} class="hover:text-zinc-500">[Name Unavailable]<%= @possessive %></.link>
+    <.link navigate={~p"/sessions/#{@character_id}"} class="hover:text-zinc-500">[Name Unavailable]<%= @possessive %></.link>
     """
   end
 
@@ -366,7 +366,7 @@ defmodule CAIWeb.ESSComponents do
     }
 
     ~H"""
-    <.link patch={~p"/sessions/#{@id}"} class={"rounded pl-1 pr-1 mr-1 #{@faction_classes}"}>
+    <.link navigate={~p"/sessions/#{@id}"} class={"rounded pl-1 pr-1 mr-1 #{@faction_classes}"}>
       <%= @name <> @possessive %>
     </.link>
     """
