@@ -6,7 +6,7 @@ defmodule CAI.ESS.MetagameEvent do
 
   import Ecto.Changeset
 
-  @primary_key {:id, :id, autogenerate: true}
+  @primary_key false
 
   schema "metagame_events" do
     field :experience_bonus, :float

@@ -9,9 +9,9 @@ defmodule CAI.ESS.Death do
   @primary_key false
 
   schema "deaths" do
-    field :character_id, :integer, primary_key: true
-    field :timestamp, :integer, primary_key: true
-    field :attacker_character_id, :integer, primary_key: true
+    field :character_id, :integer
+    field :timestamp, :integer
+    field :attacker_character_id, :integer
     field :attacker_fire_mode_id, :integer
     field :attacker_loadout_id, :integer
     field :attacker_team_id, :integer

@@ -9,8 +9,8 @@ defmodule CAI.ESS.PlayerLogout do
   @primary_key false
 
   schema "player_logouts" do
-    field :character_id, :integer, primary_key: true
-    field :timestamp, :integer, primary_key: true
+    field :character_id, :integer
+    field :timestamp, :integer
     field :world_id, :integer
   end
 

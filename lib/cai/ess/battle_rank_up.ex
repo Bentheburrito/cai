@@ -9,9 +9,9 @@ defmodule CAI.ESS.BattleRankUp do
   @primary_key false
 
   schema "battle_rank_ups" do
-    field :character_id, :integer, primary_key: true
-    field :timestamp, :integer, primary_key: true
-    field :battle_rank, :integer, primary_key: true
+    field :character_id, :integer
+    field :timestamp, :integer
+    field :battle_rank, :integer
     field :world_id, :integer
     field :zone_id, :integer
   end

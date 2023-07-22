@@ -10,7 +10,8 @@ defmodule CAI.Application do
     ess_opts = [
       subscriptions: subscriptions,
       clients: [CAI.ESS.Client],
-      service_id: CAI.sid()
+      service_id: CAI.sid(),
+      endpoint: "push.nanite-systems.net/streaming"
     ]
 
     children = [

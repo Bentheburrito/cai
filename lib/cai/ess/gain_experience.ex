@@ -6,7 +6,7 @@ defmodule CAI.ESS.GainExperience do
 
   import Ecto.Changeset
 
-  @primary_key {:id, :id, autogenerate: true}
+  @primary_key false
 
   schema "gain_experiences" do
     field :amount, :integer

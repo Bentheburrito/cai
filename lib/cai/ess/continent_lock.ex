@@ -6,7 +6,7 @@ defmodule CAI.ESS.ContinentLock do
 
   import Ecto.Changeset
 
-  @primary_key {:id, :id, autogenerate: true}
+  @primary_key false
 
   schema "continent_locks" do
     field :metagame_event_id, :integer

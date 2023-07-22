@@ -9,10 +9,10 @@ defmodule CAI.ESS.FacilityControl do
   @primary_key false
 
   schema "facility_controls" do
-    field :timestamp, :integer, primary_key: true
-    field :facility_id, :integer, primary_key: true
-    field :world_id, :integer, primary_key: true
-    field :new_faction_id, :integer, primary_key: true
+    field :timestamp, :integer
+    field :facility_id, :integer
+    field :world_id, :integer
+    field :new_faction_id, :integer
     field :duration_held, :integer
     field :old_faction_id, :integer
     field :outfit_id, :integer

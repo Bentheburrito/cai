@@ -9,8 +9,8 @@ defmodule CAI.ESS.PlayerFacilityDefend do
   @primary_key false
 
   schema "player_facility_defends" do
-    field :character_id, :integer, primary_key: true
-    field :timestamp, :integer, primary_key: true
+    field :character_id, :integer
+    field :timestamp, :integer
     field :facility_id, :integer
     field :outfit_id, :integer
     field :world_id, :integer
