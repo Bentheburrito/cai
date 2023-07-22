@@ -8,9 +8,9 @@ defmodule CAI.Characters do
   import Ecto.Query, warn: false
   import PS2.API.QueryBuilder, except: [field: 2]
 
-  alias Ecto.Changeset
-  alias CAI.Repo
   alias CAI.Characters.{Character, Outfit, Session}
+  alias CAI.Repo
+  alias Ecto.Changeset
   alias PS2.API, as: Census
   alias PS2.API.{Query, QueryResult}
 

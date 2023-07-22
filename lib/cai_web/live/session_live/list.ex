@@ -5,6 +5,7 @@ defmodule CAIWeb.SessionLive.List do
 
   alias CAI.Characters
   alias CAI.Characters.Character
+  alias CAI.ESS.Helpers
   alias CAI.ESS.PlayerLogout
   alias Phoenix.LiveView.JS
   alias Phoenix.PubSub
@@ -33,7 +34,7 @@ defmodule CAIWeb.SessionLive.List do
         |> stream(:sessions, timestamps)
         |> assign(:character, character)
         |> assign(:page_title, "#{character.name_first}'s Session List")
-        |> assign(:online?, CAI.ESS.Helpers.online?(character.character_id, timestamps))
+        |> assign(:online?, Helpers.online?(character.character_id, timestamps))
       }
     end
   end

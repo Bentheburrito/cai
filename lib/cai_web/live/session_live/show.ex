@@ -10,8 +10,8 @@ defmodule CAIWeb.SessionLive.Show do
 
   alias CAI.Characters
   alias CAI.Characters.Character
-  alias CAI.ESS.{Death, GainExperience, Helpers, MetagameEvent}
   alias CAI.Characters.Session
+  alias CAI.ESS.{Death, GainExperience, Helpers, MetagameEvent}
   alias CAIWeb.SessionLive.Entry
   alias Phoenix.PubSub
 

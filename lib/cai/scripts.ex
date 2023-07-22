@@ -14,7 +14,8 @@ defmodule CAI.Scripts do
   """
 
   import PS2.API.QueryBuilder
-  alias PS2.API.{Query, Tree, QueryResult}
+
+  alias PS2.API.{Query, QueryResult, Tree}
 
   def get_and_dump_weapons do
     # Get weapon info with sanctions

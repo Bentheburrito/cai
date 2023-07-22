@@ -16,11 +16,8 @@ defmodule CAIWeb.SessionLive.Entry do
 
   import CAI, only: [is_kill_xp: 1]
 
-  alias CAI.ESS.FacilityControl
-  alias CAI.ESS.PlayerFacilityCapture
-  alias CAI.ESS.PlayerFacilityDefend
   alias CAI.Characters
-  alias CAI.ESS.{GainExperience, Death}
+  alias CAI.ESS.{Death, FacilityControl, GainExperience, PlayerFacilityCapture, PlayerFacilityDefend}
 
   alias CAI.Characters.Character
   alias CAI.ESS.Helpers

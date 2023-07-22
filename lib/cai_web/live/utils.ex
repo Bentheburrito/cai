@@ -1,4 +1,8 @@
 defmodule CAIWeb.Utils do
+  @moduledoc """
+  Utility functions. If a function can fail, it will return a {:noreply, socket} tuple.
+  """
+
   import Phoenix.Component
   import Phoenix.LiveView
 

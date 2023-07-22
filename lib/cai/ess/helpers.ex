@@ -1,9 +1,13 @@
 defmodule CAI.ESS.Helpers do
+  @moduledoc """
+  Helper functions related to ESS events associated characters.
+  """
+
   import Ecto.Query
 
   alias CAI.Characters
   alias CAI.Characters.Character
-  alias CAI.ESS.{GainExperience, Death, PlayerLogout, VehicleDestroy}
+  alias CAI.ESS.{Death, GainExperience, PlayerLogout, VehicleDestroy}
 
   require Logger
 

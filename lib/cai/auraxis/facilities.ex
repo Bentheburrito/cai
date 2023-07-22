@@ -5,6 +5,8 @@ defmodule CAI.Auraxis.Facilities do
   """
 
   defmodule Entry do
+    @moduledoc false
+
     defstruct latest_facility_control: :none
   end
 

@@ -16,13 +16,13 @@ defmodule CAI.Characters.Session do
 
   require CAI
 
-  alias CAI.{ESS, Repo}
   alias CAI.Characters.Session
+  alias CAI.{ESS, Repo}
 
   alias CAI.ESS.{
+    BattleRankUp,
     Death,
     GainExperience,
-    BattleRankUp,
     PlayerFacilityCapture,
     PlayerFacilityDefend,
     PlayerLogin,
@@ -133,33 +133,35 @@ defmodule CAI.Characters.Session do
   end
 
   defp build_embed(module, character_id, login, logout) do
-    where_clause =
-      case module do
-        GainExperience ->
-          dynamic(
-            [e],
-            (field(e, :character_id) == ^character_id or
-               field(e, :other_id) == ^character_id) and
-              (field(e, :timestamp) >= ^login and field(e, :timestamp) <= ^logout)
-          )
-
-        mod when mod in [Death, VehicleDestroy] ->
-          dynamic(
-            [e],
-            (field(e, :character_id) == ^character_id or
-               field(e, :attacker_character_id) == ^character_id) and
-              (field(e, :timestamp) >= ^login and field(e, :timestamp) <= ^logout)
-          )
-
-        _ ->
-          dynamic(
-            [e],
-            field(e, :character_id) == ^character_id and
-              (field(e, :timestamp) >= ^login and field(e, :timestamp) <= ^logout)
-          )
-      end
+    where_clause = build_embed_where_clause(module, character_id, login, logout)
 
     Repo.all(from(e in module, select: e, where: ^where_clause))
+  end
+
+  defp build_embed_where_clause(GainExperience, character_id, login, logout) do
+    dynamic(
+      [e],
+      (field(e, :character_id) == ^character_id or
+         field(e, :other_id) == ^character_id) and
+        (field(e, :timestamp) >= ^login and field(e, :timestamp) <= ^logout)
+    )
+  end
+
+  defp build_embed_where_clause(mod, character_id, login, logout) when mod in [Death, VehicleDestroy] do
+    dynamic(
+      [e],
+      (field(e, :character_id) == ^character_id or
+         field(e, :attacker_character_id) == ^character_id) and
+        (field(e, :timestamp) >= ^login and field(e, :timestamp) <= ^logout)
+    )
+  end
+
+  defp build_embed_where_clause(_, character_id, login, logout) do
+    dynamic(
+      [e],
+      field(e, :character_id) == ^character_id and
+        (field(e, :timestamp) >= ^login and field(e, :timestamp) <= ^logout)
+    )
   end
 
   defp put_aggregates(changeset, event_list) when is_list(event_list) do

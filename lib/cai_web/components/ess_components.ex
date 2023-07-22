@@ -1,4 +1,8 @@
 defmodule CAIWeb.ESSComponents do
+  @moduledoc """
+  Functions for rendering ESS data, like Event Feed entries.
+  """
+
   use Phoenix.Component
 
   use Phoenix.VerifiedRoutes,
@@ -326,7 +330,9 @@ defmodule CAIWeb.ESSComponents do
     assigns = %{character_id: character_id, possessive: (possessive? && "'s") || ""}
 
     ~H"""
-    <.link navigate={~p"/sessions/#{@character_id}"} class="hover:text-zinc-500">[Name Unavailable]<%= @possessive %></.link>
+    <.link navigate={~p"/sessions/#{@character_id}"} class="hover:text-zinc-500">
+      [Name Unavailable]<%= @possessive %>
+    </.link>
     """
   end
 
@@ -352,17 +358,7 @@ defmodule CAIWeb.ESSComponents do
       id: id,
       possessive: (possessive? && "'s") || "",
       # Can't actually store these classes in `CAI.factions` because these classes won't be compiled...
-      faction_classes:
-        case {CAI.factions()[faction_id].alias, team_id} do
-          {"NS" <> _, 1} -> "bg-gradient-to-r from-gray-600 to-purple-600 hover:bg-gray-800"
-          {"NS" <> _, 2} -> "bg-gradient-to-r from-gray-600 to-blue-600 hover:bg-gray-800"
-          {"NS" <> _, 3} -> "bg-gradient-to-r from-gray-600 to-red-500 hover:bg-gray-800"
-          {"NS" <> _, _} -> "bg-gray-600 hover:bg-gray-800"
-          {"NC", _} -> "bg-blue-600 hover:bg-blue-800"
-          {"VS", _} -> "bg-purple-600 hover:bg-purple-800"
-          {"TR", _} -> "bg-red-500 hover:bg-red-800"
-          _ -> "bg-gray-600 hover:bg-gray-800"
-        end
+      faction_classes: faction_css_classes(faction_id, team_id)
     }
 
     ~H"""
@@ -370,6 +366,19 @@ defmodule CAIWeb.ESSComponents do
       <%= @name <> @possessive %>
     </.link>
     """
+  end
+
+  defp faction_css_classes(faction_id, team_id) do
+    case {CAI.factions()[faction_id].alias, team_id} do
+      {"NS" <> _, 1} -> "bg-gradient-to-r from-gray-600 to-purple-600 hover:bg-gray-800"
+      {"NS" <> _, 2} -> "bg-gradient-to-r from-gray-600 to-blue-600 hover:bg-gray-800"
+      {"NS" <> _, 3} -> "bg-gradient-to-r from-gray-600 to-red-500 hover:bg-gray-800"
+      {"NS" <> _, _} -> "bg-gray-600 hover:bg-gray-800"
+      {"NC", _} -> "bg-blue-600 hover:bg-blue-800"
+      {"VS", _} -> "bg-purple-600 hover:bg-purple-800"
+      {"TR", _} -> "bg-red-500 hover:bg-red-800"
+      _ -> "bg-gray-600 hover:bg-gray-800"
+    end
   end
 
   defp get_weapon_name(0, 0) do
