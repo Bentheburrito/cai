@@ -51,4 +51,7 @@ defmodule CAIWeb.Utils do
     |> Stream.map(fn {duration, unit} -> "#{duration} #{unit}" end)
     |> Enum.join(" ")
   end
+
+  def safe_divide(num, denom) when denom in [0, 0.0], do: num / 1
+  def safe_divide(num, denom), do: num / denom
 end

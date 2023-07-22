@@ -283,59 +283,65 @@ defmodule CAI.Characters do
   TODO: cache results
   """
   @spec get_session_history(
-          character_id(),
+          character_id() | Session.t(),
           login :: integer(),
           logout :: integer(),
           cache? :: boolean()
         ) :: [map()] | {:error, Ecto.Changeset.t()}
-  def get_session_history(character_id, login, logout, _cache? \\ true) do
+  def get_session_history(character_id_or_session, login, logout, cache? \\ true)
+
+  def get_session_history(character_id, login, logout, _cache?) when is_character_id(character_id) do
     with {:ok, session} <- Session.build(character_id, login, logout) do
-      {world_id, zone_ids, facility_ids} =
-        (Map.get(session, :player_facility_captures, []) ++ Map.get(session, :player_facility_defends, []))
-        |> Enum.reduce({nil, MapSet.new(), MapSet.new()}, fn event, {_, zone_ids, facility_ids} ->
-          {event.world_id, MapSet.put(zone_ids, event.zone_id), MapSet.put(facility_ids, event.facility_id)}
-        end)
-
-      [
-        :battle_rank_ups,
-        :deaths,
-        :gain_experiences,
-        :facility_control,
-        :player_facility_captures,
-        :player_facility_defends,
-        :vehicle_destroys,
-        :login,
-        :logout
-      ]
-      |> Enum.reduce([], fn
-        # special case for `embeds_one` fields (which aren't a list)
-        field, event_list when field in [:login, :logout] ->
-          case Map.fetch(session, field) do
-            {:ok, nil} -> event_list
-            {:ok, event} -> [event | event_list]
-            _ -> event_list
-          end
-
-        # Instead of storing facility_control events on a Session, let's just make another query here
-        :facility_control, event_list when not is_nil(world_id) ->
-          FacilityControl
-          |> where([fc], fc.timestamp >= ^login and fc.timestamp <= ^logout)
-          |> where([fc], fc.world_id == ^world_id)
-          |> where([fc], fc.zone_id in ^MapSet.to_list(zone_ids))
-          |> where([fc], fc.facility_id in ^MapSet.to_list(facility_ids))
-          |> Repo.all()
-          |> Kernel.++(event_list)
-
-        :facility_control, event_list ->
-          event_list
-
-        field, acc ->
-          Enum.reduce(Map.fetch!(session, field), acc, fn event, event_list ->
-            [event | event_list]
-          end)
-      end)
-      |> Enum.sort_by(& &1.timestamp, :desc)
+      get_session_history(session, login, logout)
     end
+  end
+
+  def get_session_history(%Session{} = session, login, logout, _cache?) do
+    {world_id, zone_ids, facility_ids} =
+      (Map.get(session, :player_facility_captures, []) ++ Map.get(session, :player_facility_defends, []))
+      |> Enum.reduce({nil, MapSet.new(), MapSet.new()}, fn event, {_, zone_ids, facility_ids} ->
+        {event.world_id, MapSet.put(zone_ids, event.zone_id), MapSet.put(facility_ids, event.facility_id)}
+      end)
+
+    [
+      :battle_rank_ups,
+      :deaths,
+      :gain_experiences,
+      :facility_control,
+      :player_facility_captures,
+      :player_facility_defends,
+      :vehicle_destroys,
+      :login,
+      :logout
+    ]
+    |> Enum.reduce([], fn
+      # special case for `embeds_one` fields (which aren't a list)
+      field, event_list when field in [:login, :logout] ->
+        case Map.fetch(session, field) do
+          {:ok, nil} -> event_list
+          {:ok, event} -> [event | event_list]
+          _ -> event_list
+        end
+
+      # Instead of storing facility_control events on a Session, let's just make another query here
+      :facility_control, event_list when not is_nil(world_id) ->
+        FacilityControl
+        |> where([fc], fc.timestamp >= ^login and fc.timestamp <= ^logout)
+        |> where([fc], fc.world_id == ^world_id)
+        |> where([fc], fc.zone_id in ^MapSet.to_list(zone_ids))
+        |> where([fc], fc.facility_id in ^MapSet.to_list(facility_ids))
+        |> Repo.all()
+        |> Kernel.++(event_list)
+
+      :facility_control, event_list ->
+        event_list
+
+      field, acc ->
+        Enum.reduce(Map.fetch!(session, field), acc, fn event, event_list ->
+          [event | event_list]
+        end)
+    end)
+    |> Enum.sort_by(& &1.timestamp, :desc)
   end
 
   @default_session_count 10

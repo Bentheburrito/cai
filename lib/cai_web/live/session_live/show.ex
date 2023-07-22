@@ -11,6 +11,7 @@ defmodule CAIWeb.SessionLive.Show do
   alias CAI.Characters
   alias CAI.Characters.Character
   alias CAI.ESS.{Death, GainExperience, Helpers, MetagameEvent}
+  alias CAI.Characters.Session
   alias CAIWeb.SessionLive.Entry
   alias Phoenix.PubSub
 
@@ -39,6 +40,7 @@ defmodule CAIWeb.SessionLive.Show do
     with {:ok, login} <- parse_int_param(login, socket),
          {:ok, logout} <- parse_int_param(logout, socket),
          {:ok, %Character{} = character} <- get_character(character_id, socket),
+         {:ok, session} <- Session.build(character.character_id, login, logout),
          {:ok, event_history} <- get_session_history(character.character_id, login, logout, socket) do
       {init_events, remaining_events, new_limit} = split_events_while(event_history, @events_limit)
 
@@ -48,6 +50,7 @@ defmodule CAIWeb.SessionLive.Show do
         :noreply,
         socket
         |> stream(:events, [], reset: true, at: @append, limit: @events_limit)
+        |> assign(:aggregates, Map.take(session, Session.aggregate_fields()))
         |> assign(:remaining_events, remaining_events)
         |> assign(:page_title, "#{character.name_first}'s Previous Session")
         |> assign(:timestamps, {login, logout})
@@ -61,7 +64,8 @@ defmodule CAIWeb.SessionLive.Show do
   # Live Session
   @impl true
   def handle_params(%{"character_id" => character_id}, _, socket) do
-    with {:ok, %Character{} = character} <- get_character(character_id, socket) do
+    with {:ok, %Character{} = character} <- get_character(character_id, socket),
+         {:ok, _c, timestamps} <- Characters.get_session_boundaries(character.character_id, 1) do
       if connected?(socket) do
         # Unsubscribe from the previously tracked character (if there is one)
         if socket.assigns[:character] do
@@ -72,12 +76,20 @@ defmodule CAIWeb.SessionLive.Show do
         PubSub.subscribe(CAI.PubSub, "ess:FacilityControl")
       end
 
+      timestamps =
+        case timestamps do
+          [{login, logout}] -> {login, logout}
+          _ -> {:os.system_time(:second), :os.system_time(:second) + 1}
+        end
+
       {
         :noreply,
         socket
         |> stream(:events, [], at: @prepend, limit: @events_limit)
+        |> assign(:aggregates, Map.new(Session.aggregate_fields(), &{&1, 0}))
         |> assign(:page_title, "#{character.name_first}'s Session")
         |> assign(:live?, true)
+        |> assign(:timestamps, timestamps)
         |> assign(:pending_groups, %{})
         |> assign(:character, character)
       }
@@ -127,54 +139,17 @@ defmodule CAIWeb.SessionLive.Show do
     }
   end
 
-  # Live Session - receive a new Death or PlayerFacilityCapture/Defend event via PubSub
-  @enrichable_events [Death, PlayerFacilityCapture, PlayerFacilityDefend]
-  @event_pending_delay 1000
-  @impl true
-  def handle_info({:event, %Ecto.Changeset{data: %mod{}} = event_cs}, socket) when mod in @enrichable_events do
-    handle_enrichable_event(event_cs, socket)
-  end
-
-  # Live Session - receive a new kill bonus GE event via PubSub
-  @impl true
-  def handle_info({:event, %Ecto.Changeset{changes: %{experience_id: id}} = event_cs}, socket) when is_kill_xp(id) do
-    handle_bonus_event(event_cs, socket)
-  end
-
-  @impl true
-  def handle_info({:event, %Ecto.Changeset{data: %FacilityControl{}} = event_cs}, socket) do
-    handle_bonus_event(event_cs, socket)
-  end
-
   # Live Session - receive a new event via PubSub
   @impl true
   def handle_info({:event, %Ecto.Changeset{} = event_cs}, socket) do
     event = Ecto.Changeset.apply_changes(event_cs)
-    character = socket.assigns.character
+    %{aggregates: aggregates, character: %{character_id: character_id}} = socket.assigns
 
-    other = Helpers.get_other_character(character.character_id, event)
+    aggregates = Session.put_aggregate_event(event, aggregates, character_id)
 
-    prev_entry = Map.get(socket.assigns, :last_entry, Entry.new(%MetagameEvent{}, %{}))
+    socket = assign(socket, :aggregates, aggregates)
 
-    if Helpers.consecutive?(event, prev_entry.event) do
-      updated_entry = %Entry{prev_entry | count: prev_entry.count + 1}
-
-      {
-        :noreply,
-        socket
-        |> stream_insert(:events, updated_entry, at: @append, limit: @events_limit)
-        |> assign(:last_entry, updated_entry)
-      }
-    else
-      entry = Entry.new(event, character, other)
-
-      {
-        :noreply,
-        socket
-        |> stream_insert(:events, entry, at: @prepend, limit: @events_limit)
-        |> assign(:last_entry, entry)
-      }
-    end
+    handle_ess_event(event, socket)
   end
 
   @impl true
@@ -211,8 +186,51 @@ defmodule CAIWeb.SessionLive.Show do
 
   ### HELPERS ###
 
-  defp handle_enrichable_event(event_cs, socket) do
-    event = Ecto.Changeset.apply_changes(event_cs)
+  # Death or PlayerFacilityCapture/Defend primary event
+  @enrichable_events [Death, PlayerFacilityCapture, PlayerFacilityDefend]
+  @event_pending_delay 1000
+  def handle_ess_event(%mod{} = event, socket) when mod in @enrichable_events do
+    handle_enrichable_event(event, socket)
+  end
+
+  # kill bonus GE event
+  def handle_ess_event(%{experience_id: id} = event, socket) when is_kill_xp(id) do
+    handle_bonus_event(event, socket)
+  end
+
+  # facility control bonus event
+  def handle_ess_event(%FacilityControl{} = event, socket) do
+    handle_bonus_event(event, socket)
+  end
+
+  # catch-all/ordinary event that doesn't need to be condensed
+  def handle_ess_event(event, socket) do
+    character = socket.assigns.character
+    other = Helpers.get_other_character(character.character_id, event)
+    prev_entry = Map.get(socket.assigns, :last_entry, Entry.new(%MetagameEvent{}, %{}))
+
+    if Helpers.consecutive?(event, prev_entry.event) do
+      updated_entry = %Entry{prev_entry | count: prev_entry.count + 1}
+
+      {
+        :noreply,
+        socket
+        |> stream_insert(:events, updated_entry, at: @append, limit: @events_limit)
+        |> assign(:last_entry, updated_entry)
+      }
+    else
+      entry = Entry.new(event, character, other)
+
+      {
+        :noreply,
+        socket
+        |> stream_insert(:events, entry, at: @prepend, limit: @events_limit)
+        |> assign(:last_entry, entry)
+      }
+    end
+  end
+
+  defp handle_enrichable_event(event, socket) do
     pending_key = group_key(event)
 
     pending_groups = socket.assigns.pending_groups
@@ -225,8 +243,7 @@ defmodule CAIWeb.SessionLive.Show do
     end
   end
 
-  defp handle_bonus_event(event_cs, socket) do
-    event = Ecto.Changeset.apply_changes(event_cs)
+  defp handle_bonus_event(event, socket) do
     pending_key = group_key(event)
 
     pending_groups = socket.assigns.pending_groups
@@ -274,8 +291,8 @@ defmodule CAIWeb.SessionLive.Show do
   end
 
   # Get a character's events from the session defined by login..logout
-  defp get_session_history(character_id, login, logout, socket) do
-    case Characters.get_session_history(character_id, login, logout) do
+  defp get_session_history(session, login, logout, socket) do
+    case Characters.get_session_history(session, login, logout) do
       events when is_list(events) ->
         {:ok, events}
 
@@ -287,7 +304,7 @@ defmodule CAIWeb.SessionLive.Show do
         {:noreply,
          socket
          |> put_flash(:error, "Unable to load that session right now. Please try again")
-         |> push_navigate(to: ~p"/sessions/#{character_id}")}
+         |> push_navigate(to: ~p"/sessions/#{session.character_id}")}
     end
   end
 
