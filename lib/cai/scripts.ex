@@ -17,6 +17,8 @@ defmodule CAI.Scripts do
 
   alias PS2.API.{Query, QueryResult, Tree}
 
+  require Logger
+
   def get_and_dump_weapons do
     # Get weapon info with sanctions
     res =
@@ -160,17 +162,16 @@ defmodule CAI.Scripts do
   end
 
   def load_static_file(path) do
-    unless File.exists?(path) do
-      get_and_dump_facilities()
-      get_and_dump_vehicles()
-      get_and_dump_weapons()
-      get_and_dump_xp()
-    end
+    case File.read(path) do
+      {:ok, content} ->
+        content
+        |> Jason.decode!()
+        |> Map.new(fn {str_key, value} -> {maybe_to_int(str_key), value} end)
 
-    path
-    |> File.read!()
-    |> Jason.decode!()
-    |> Map.new(fn {str_key, value} -> {maybe_to_int(str_key), value} end)
+      {:error, error} ->
+        Logger.error("Could not load static cache file #{inspect(path)}: #{inspect(error)}")
+        %{}
+    end
   end
 
   defp maybe_to_int(value, default \\ :use_value)
