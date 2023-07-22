@@ -2,12 +2,10 @@ defmodule CAIWeb.SessionLive.List do
   use CAIWeb, :live_view
 
   import CAIWeb.Utils
-  import Ecto.Query
 
   alias CAI.Characters
   alias CAI.Characters.Character
   alias CAI.ESS.PlayerLogout
-  alias CAI.Characters.Session
   alias Phoenix.LiveView.JS
   alias Phoenix.PubSub
 
@@ -29,23 +27,13 @@ defmodule CAIWeb.SessionLive.List do
         PubSub.subscribe(CAI.PubSub, "ess:#{character.character_id}")
       end
 
-      # first element of timestamps list, 2nd element of the tuple is the logout timestamp
-      latest_timestamp = get_in(timestamps, [Access.at(0), Access.elem(1)]) || 0
-      recent? = latest_timestamp > :os.system_time(:second) - Session.session_timeout_mins() * 60
-
-      logout? =
-        PlayerLogout
-        |> where([logout], logout.character_id == ^character.character_id)
-        |> where([logout], logout.timestamp == ^latest_timestamp)
-        |> CAI.Repo.exists?()
-
       {
         :noreply,
         socket
         |> stream(:sessions, timestamps)
         |> assign(:character, character)
         |> assign(:page_title, "#{character.name_first}'s Session List")
-        |> assign(:online?, recent? and not logout?)
+        |> assign(:online?, CAI.ESS.Helpers.online?(character.character_id, timestamps))
       }
     end
   end

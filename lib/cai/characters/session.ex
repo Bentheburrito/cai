@@ -87,10 +87,12 @@ defmodule CAI.Characters.Session do
   Use `changeset/2` when you want to update a session after it has been built. `changeset/2` should really only be used
   if the session is ongoing/live.
   """
+  @spec build(CAI.Characters.character_id(), Range.t()) :: {:ok, %__MODULE__{}} | {:error, Changeset.t()}
   def build(character_id, login..logout) do
     build(character_id, login, logout)
   end
 
+  @spec build(CAI.Characters.character_id(), integer(), integer()) :: {:ok, %__MODULE__{}} | {:error, Changeset.t()}
   def build(character_id, login, logout) when is_integer(login) and is_integer(logout) do
     changeset =
       %Session{}

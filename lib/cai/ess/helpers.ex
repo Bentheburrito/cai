@@ -1,7 +1,9 @@
 defmodule CAI.ESS.Helpers do
+  import Ecto.Query
+
   alias CAI.Characters
   alias CAI.Characters.Character
-  alias CAI.ESS.{GainExperience, Death, VehicleDestroy}
+  alias CAI.ESS.{GainExperience, Death, PlayerLogout, VehicleDestroy}
 
   require Logger
 
@@ -22,6 +24,25 @@ defmodule CAI.ESS.Helpers do
       Map.get(e1, :attacker_character_id) == Map.get(e2, :attacker_character_id) and
       Map.get(e1, :other_id) == Map.get(e2, :other_id) and
       Map.get(e1, :experience_id) == Map.get(e2, :experience_id)
+  end
+
+  @doc """
+  Given a character ID and a list of timestamps returned by Characters.get_session_boundaries/1, determine if the
+  character is currently online.
+  """
+  @spec online?(Characters.character_id(), [{integer(), integer()}]) :: boolean()
+  def online?(character_id, timestamps) do
+    # first element of timestamps list, 2nd element of the tuple is the logout timestamp
+    latest_timestamp = get_in(timestamps, [Access.at(0), Access.elem(1)]) || 0
+    recent? = latest_timestamp > :os.system_time(:second) - Characters.Session.session_timeout_mins() * 60
+
+    logout? =
+      PlayerLogout
+      |> where([logout], logout.character_id == ^character_id)
+      |> where([logout], logout.timestamp == ^latest_timestamp)
+      |> CAI.Repo.exists?()
+
+    recent? and not logout?
   end
 
   @doc """

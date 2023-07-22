@@ -49,14 +49,14 @@ defmodule CAIWeb.SessionLive.Show do
       {
         :noreply,
         socket
-        |> stream(:events, [], reset: true, at: @append, limit: @events_limit)
         |> assign(:aggregates, Map.take(session, Session.aggregate_fields()))
-        |> assign(:remaining_events, remaining_events)
-        |> assign(:page_title, "#{character.name_first}'s Previous Session")
-        |> assign(:timestamps, {login, logout})
         |> assign(:character, character)
+        |> stream(:events, [], reset: true, at: @append, limit: @events_limit)
         |> assign(:live?, false)
         |> assign(:loading_more?, true)
+        |> assign(:page_title, "#{character.name_first}'s Previous Session")
+        |> assign(:remaining_events, remaining_events)
+        |> assign(:timestamps, {login, logout})
       }
     end
   end
@@ -76,6 +76,38 @@ defmodule CAIWeb.SessionLive.Show do
         PubSub.subscribe(CAI.PubSub, "ess:FacilityControl")
       end
 
+      # If the character is currently online, let's build the session so far
+      aggregates =
+        with true <- Helpers.online?(character.character_id, timestamps),
+             [{login, logout} | _] <- timestamps,
+             {:ok, session} <- Session.build(character.character_id, login, logout),
+             {:ok, event_history} <- get_session_history(character.character_id, login, logout, socket) do
+          {init_events, _remaining_events, new_limit} = split_events_while(event_history, @events_limit)
+
+          bulk_append(init_events, character, new_limit)
+
+          Map.take(session, Session.aggregate_fields())
+        else
+          false ->
+            Map.new(Session.aggregate_fields(), &{&1, 0})
+
+          {:error, changeset} ->
+            Logger.error("Could not build a session handling live session params: #{inspect(changeset)}")
+            Map.new(Session.aggregate_fields(), &{&1, 0})
+
+          [] ->
+            Logger.error("""
+            Tried to match `[{login, logout} | _]` from `timestamps = #{inspect(timestamps)}`, but got an empty list.
+            #{character.name_first} (#{character.character_id}) was confirmed online, so there should have been at least one boundary pair:
+            #{Helpers.online?(character.character_id, timestamps)} = Helpers.online?(#{character.character_id}, #{inspect(timestamps)})
+            """)
+
+            Map.new(Session.aggregate_fields(), &{&1, 0})
+
+          {:noreply, _socket} ->
+            Map.new(Session.aggregate_fields(), &{&1, 0})
+        end
+
       timestamps =
         case timestamps do
           [{login, logout}] -> {login, logout}
@@ -85,13 +117,13 @@ defmodule CAIWeb.SessionLive.Show do
       {
         :noreply,
         socket
-        |> stream(:events, [], at: @prepend, limit: @events_limit)
-        |> assign(:aggregates, Map.new(Session.aggregate_fields(), &{&1, 0}))
-        |> assign(:page_title, "#{character.name_first}'s Session")
-        |> assign(:live?, true)
-        |> assign(:timestamps, timestamps)
-        |> assign(:pending_groups, %{})
+        |> assign(:aggregates, aggregates)
         |> assign(:character, character)
+        |> stream(:events, [], at: @prepend, limit: @events_limit)
+        |> assign(:live?, true)
+        |> assign(:page_title, "#{character.name_first}'s Session")
+        |> assign(:pending_groups, %{})
+        |> assign(:timestamps, timestamps)
       }
     end
   end
