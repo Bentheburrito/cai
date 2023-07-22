@@ -171,4 +171,8 @@ defmodule CAI do
       characters: ["all"]
     ]
   end
+
+  def please_report_msg do
+    "If the issue persists, please consider creating an issue on GitHub (link in footer at the bottom of the page!)"
+  end
 end

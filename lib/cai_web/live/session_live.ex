@@ -9,7 +9,7 @@ defmodule CAIWeb.SessionLive do
   @impl true
   def render(assigns) do
     ~H"""
-    <h3>Search for a character to see their previous sessions</h3>
+    <h3>Search for a character to see their current and previous sessions</h3>
     <form phx-change="validate" phx-submit="search">
       <.input
         placeholder="Type a character name or ID here"

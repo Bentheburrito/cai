@@ -544,11 +544,12 @@ defmodule CAIWeb.CoreComponents do
       <.back navigate={~p"/posts"}>Back to posts</.back>
   """
   attr(:navigate, :any, required: true)
+  attr(:parent_class, :string, default: "mt-16")
   slot(:inner_block, required: true)
 
   def back(assigns) do
     ~H"""
-    <div class="mt-16">
+    <div class={@parent_class}>
       <.link navigate={@navigate} class="text-sm font-semibold leading-6 text-zinc-400 hover:text-zinc-500">
         <.icon name="hero-arrow-left-solid" class="h-3 w-3" />
         <%= render_slot(@inner_block) %>

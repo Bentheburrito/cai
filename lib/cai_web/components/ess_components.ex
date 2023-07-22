@@ -206,9 +206,9 @@ defmodule CAIWeb.ESSComponents do
 
     ~H"""
     <%= cond do %>
-      <% @vehicle_killed -> %>
+      <% assigns[:vehicle_killed] -> %>
         <%= link_character(@character, @event.team_id, true) %> <%= @vehicle_killer %> gunner destroyed a <%= @vehicle_killed %>
-      <% @vehicle_killer -> %>
+      <% assigns[:vehicle_killer] -> %>
         <%= link_character(@character, @event.team_id, true) %> <%= @vehicle_killer %> gunner killed <%= link_character(
           @other
         ) %>

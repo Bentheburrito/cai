@@ -1,12 +1,18 @@
-<.character_header character={assigns[:character]} />
+<.back navigate={~p"/sessions/#{@character.character_id}"} parent_class="mb-2">Back to sessions</.back>
 
-<% {login, logout} = @timestamps %>
-<div :if={not @live?}>
-  <h3 class="m-2">
-    Session from <.timestamp id="session-login" unix_timestamp={login} class="font-bold" /> to
-    <.timestamp id="session-logout" unix_timestamp={logout} class="font-bold" />
-    <br /> Lasted <span class="font-bold"><%= format_duration(login, logout) %></span>
-  </h3>
+<div class="flex">
+  <div class="flex-col mr-4">
+    <.character_header character={assigns[:character]} />
+  </div>
+
+  <% {login, logout} = @timestamps %>
+  <div :if={not @live?} class="flex-col">
+    <h3 class="m-2">
+      Session from <.timestamp id="session-login" unix_timestamp={login} class="font-bold" /> to
+      <.timestamp id="session-logout" unix_timestamp={logout} class="font-bold" />
+      <br /> Lasted <span class="font-bold"><%= format_duration(login, logout) %></span>
+    </h3>
+  </div>
 </div>
 
 <div :if={assigns[:aggregates]}>
@@ -15,7 +21,7 @@
   </h3>
   <div class="flex border-solid border-4 m-1 p-2 rounded-2xl border-gray-400">
     <table class="flex-col text-left">
-      <th class="p-1 pl-2 border-solid border-b border-r border-gray-200">Infantry</th>
+      <th class="p-1 pl-2 border-solid border-b border-r border-gray-200" title="Infantry-related stats">Infantry</th>
       <th class="p-1 pl-2 border-solid border-b border-gray-200">Total</th>
       <th class="p-1 pl-2 border-solid border-b border-gray-200" title="Infantry vs. Infantry">IvI</th>
       <th class="p-1 pl-2 border-solid border-b border-gray-200">Headshots</th>
@@ -96,7 +102,7 @@
         <td class="p-1 pl-2">-</td>
         <td class="p-1 pl-2">-</td>
       </tr>
-      <th class="p-1 pl-2 border-solid border-b border-r border-gray-200">Vehicle</th>
+      <th class="p-1 pl-2 border-solid border-b border-r border-gray-200" title="Vehicle-related stats">Vehicle</th>
       <th class="p-1 pl-2 border-solid border-b border-gray-200" title="Total # of Vehicles">Total</th>
       <th class="p-1 pl-2 border-solid border-b border-gray-200" title="Total Nanite Cost">Nanites</th>
       <tr>
@@ -110,7 +116,7 @@
         <td class="p-1 pl-2"><%= @aggregates.nanites_lost %></td>
       </tr>
       <tr>
-        <td class="p-1 pl-2 border-r">KDR</td>
+        <td class="p-1 pl-2 border-r" title="Kill/Death Ratio (Destroyed / Lost)">KDR</td>
         <td
           class="p-1 pl-2"
           title={"# vehicles destroyed / # vehicles lost => #{@aggregates.vehicle_kill_count} / #{@aggregates.vehicle_death_count}"}
@@ -127,6 +133,8 @@
     </table>
     <div class="flex-col ml-4">
       XP Earned: <%= @aggregates.xp_earned %> <br /> Revive Count: <%= @aggregates.revive_count %> <br />
+      <br />
+      Pro tip: you can hover over some headers to see a more descriptive title, or hover over certain cells to see how they're calculated
     </div>
   </div>
 </div>

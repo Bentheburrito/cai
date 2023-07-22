@@ -9,9 +9,9 @@ defmodule CAI.ESS.VehicleDestroy do
   @primary_key false
 
   schema "vehicle_destroys" do
-    field :character_id, :integer, primary_key: true
-    field :timestamp, :integer, primary_key: true
-    field :attacker_character_id, :integer, primary_key: true
+    field :character_id, :integer
+    field :timestamp, :integer
+    field :attacker_character_id, :integer
     field :attacker_loadout_id, :integer
     field :attacker_team_id, :integer
     field :attacker_vehicle_id, :integer
@@ -32,8 +32,5 @@ defmodule CAI.ESS.VehicleDestroy do
 
     event
     |> cast(params, field_list)
-    |> unique_constraint([:character_id, :timestamp, :attacker_character_id],
-      name: "vehicle_destroys_pkey"
-    )
   end
 end

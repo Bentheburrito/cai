@@ -58,6 +58,29 @@ defmodule CAIWeb.SessionLive.Show do
         |> assign(:remaining_events, remaining_events)
         |> assign(:timestamps, {login, logout})
       }
+    else
+      {:error, changeset} ->
+        bubbled_errors =
+          Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
+            Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
+              opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
+            end)
+          end)
+
+        Logger.error("Could not build session: #{inspect(bubbled_errors)}")
+
+        {
+          :noreply,
+          socket
+          |> put_flash(
+            :error,
+            "Something went wrong opening that character's session, please try again. #{CAI.please_report_msg()}"
+          )
+          |> push_navigate(to: ~p"/sessions/#{character_id}")
+        }
+
+      {:noreply, socket} ->
+        {:noreply, socket}
     end
   end
 
