@@ -106,12 +106,12 @@ defmodule CAIWeb.SessionLive.Entry do
   end
 
   defp map(
-         [%Entry{event: prev_e1} = prev_entry1, %Entry{event: prev_e2, count: prev_count} = prev_entry2 | mapped],
+         [%Entry{} = prev_entry1, %Entry{count: prev_count} = prev_entry2 | mapped],
          [e | rem_events],
          character,
          other_char_map
        ) do
-    if Helpers.consecutive?(prev_e1, prev_e2) do
+    if Helpers.consecutive?(prev_entry1.event, prev_entry2.event, prev_entry1.bonuses, prev_entry2.bonuses) do
       map([%Entry{prev_entry2 | count: prev_count + 1} | mapped], [e | rem_events], character, other_char_map)
     else
       other = Helpers.get_other_character(character.character_id, e, &Map.fetch(other_char_map, &1))

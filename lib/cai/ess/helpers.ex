@@ -21,13 +21,17 @@ defmodule CAI.ESS.Helpers do
   - other_id
   - experience_id
   """
-  @spec consecutive?(map(), map()) :: boolean()
-  def consecutive?(%mod1{} = e1, %mod2{} = e2) do
+  @spec consecutive?(map(), map(), list(), list()) :: boolean()
+  def consecutive?(%mod1{} = e1, %mod2{} = e2, bonuses1 \\ [], bonuses2 \\ []) do
     mod1 == mod2 and
       Map.get(e1, :character_id) == Map.get(e2, :character_id) and
+      Map.get(e1, :character_loadout_id) == Map.get(e2, :character_loadout_id) and
       Map.get(e1, :attacker_character_id) == Map.get(e2, :attacker_character_id) and
+      Map.get(e1, :attacker_loadout_id) == Map.get(e2, :attacker_loadout_id) and
+      Map.get(e1, :attacker_weapon_id) == Map.get(e2, :attacker_weapon_id) and
       Map.get(e1, :other_id) == Map.get(e2, :other_id) and
-      Map.get(e1, :experience_id) == Map.get(e2, :experience_id)
+      Map.get(e1, :experience_id) == Map.get(e2, :experience_id) and
+      bonuses1 == bonuses2
   end
 
   @doc """

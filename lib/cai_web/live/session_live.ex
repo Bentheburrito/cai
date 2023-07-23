@@ -19,6 +19,7 @@ defmodule CAIWeb.SessionLive do
         value={@ref}
         type="text"
         errors={@ref_errors}
+        autofocus
       />
       <.button class="mt-2 bg-gray-800">Search</.button>
     </form>
@@ -27,7 +28,13 @@ defmodule CAIWeb.SessionLive do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, socket |> assign(:ref, "") |> assign(:ref_errors, [])}
+    {
+      :ok,
+      socket
+      |> assign(:ref, "")
+      |> assign(:ref_errors, [])
+      |> assign(:page_title, "Search for a Character")
+    }
   end
 
   @impl true
