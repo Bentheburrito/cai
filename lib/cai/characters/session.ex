@@ -94,11 +94,19 @@ defmodule CAI.Characters.Session do
 
   @spec build(CAI.Characters.character_id(), integer(), integer()) :: {:ok, %__MODULE__{}} | {:error, Changeset.t()}
   def build(character_id, login, logout) when is_integer(login) and is_integer(logout) do
-    changeset =
-      %Session{}
-      |> cast(%{character_id: character_id}, [:character_id])
-      |> validate_required([:character_id])
+    %Session{}
+    |> cast(%{character_id: character_id}, [:character_id])
+    |> validate_required([:character_id])
+    |> case do
+      %{valid?: true} = changeset ->
+        do_build(character_id, changeset, login, logout)
 
+      invalid_cs ->
+        {:error, invalid_cs}
+    end
+  end
+
+  defp do_build(character_id, changeset, login, logout) do
     [
       {:gain_experiences, GainExperience},
       {:deaths, Death},

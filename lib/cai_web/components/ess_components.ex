@@ -33,12 +33,12 @@ defmodule CAIWeb.ESSComponents do
 
   def event_item(assigns) do
     ~H"""
-    <% log_item_assigns =
+    <% assigns =
       assigns
       |> Map.put(:character, @entry.character)
       |> Map.put(:other, @entry.other)
       |> Map.put(:event, @entry.event) %>
-    <%= unless (log = build_event_log_item(log_item_assigns, @entry.event, @entry.character.character_id)) == "" do %>
+    <%= unless (log = build_event_log_item(assigns, @entry.event, @entry.character.character_id)) == "" do %>
       <div
         id={@id}
         phx-mounted={
@@ -296,7 +296,7 @@ defmodule CAIWeb.ESSComponents do
   def build_event_log_item(_, _, _), do: ""
 
   defp render_bonus(assigns, %GainExperience{} = ge) do
-    assigns = assign(assigns, :ge, ge)
+    assigns = Map.put(assigns, :ge, ge)
 
     ~H"""
     <img
@@ -310,11 +310,11 @@ defmodule CAIWeb.ESSComponents do
   end
 
   defp render_bonus(assigns, %FacilityControl{} = fc) do
-    assigns = assign(assigns, :fc, fc)
+    assigns = Map.put(assigns, :fc, fc)
 
     ~H"""
     <%= if Map.get(@entry.event, :outfit_id) == @fc.outfit_id do %>
-      <span>for their outfit, [<%= @character.outfit[:alias] %>]</span>
+      <span>for their outfit, [<%= @character.outfit.alias %>]</span>
     <% else %>
       <span :for={{:ok, outfit} <- [CAI.Characters.fetch_outfit(@fc.outfit_id)]}>
         for [<%= Map.get(outfit, :alias) %>]

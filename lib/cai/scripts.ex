@@ -17,6 +17,8 @@ defmodule CAI.Scripts do
 
   alias PS2.API.{Query, QueryResult, Tree}
 
+  require Logger
+
   def get_and_dump_weapons do
     # Get weapon info with sanctions
     res =
@@ -122,7 +124,7 @@ defmodule CAI.Scripts do
     end
 
     {:ok, %PS2.API.QueryResult{data: xp_list}} =
-      PS2.API.query(Query.new(collection: "experience") |> limit(5000), "example")
+      PS2.API.query(Query.new(collection: "experience") |> limit(5000), CAI.sid())
 
     new_xp_map =
       for %{"description" => desc} = xp_map <- xp_list,
@@ -160,10 +162,16 @@ defmodule CAI.Scripts do
   end
 
   def load_static_file(path) do
-    path
-    |> File.read!()
-    |> Jason.decode!()
-    |> Map.new(fn {str_key, value} -> {maybe_to_int(str_key), value} end)
+    case File.read(path) do
+      {:ok, content} ->
+        content
+        |> Jason.decode!()
+        |> Map.new(fn {str_key, value} -> {maybe_to_int(str_key), value} end)
+
+      {:error, error} ->
+        Logger.error("Could not load static cache file #{inspect(path)}: #{inspect(error)}")
+        %{}
+    end
   end
 
   defp maybe_to_int(value, default \\ :use_value)
