@@ -4,13 +4,7 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
 
   ## TODO:
 
-  Schedule jobs (Oban?) to pull static data from the Census/Community GitHub if PS2 a maintainance/update is detected
-  (Isn't there an RSS feed for this? GitHub hook to detect when community GH has changes merged in??)
-
-  If this project ever goes multi-node, though, persisting to disk could probably be avoid (or at least a last
-  resort), as new nodes joining the cluster can sync to get cache states.
-
-  also need to find a better data source for vehicle costs than vehicle_cost_map...
+  need to find a better data source for vehicle costs than vehicle_cost_map...
   """
 
   import PS2.API.QueryBuilder
