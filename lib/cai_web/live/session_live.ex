@@ -39,23 +39,41 @@ defmodule CAIWeb.SessionLive do
 
   @impl true
   def handle_event("validate", %{"character-ref" => ref}, socket) do
-    ref_errors = if String.length(ref) < 3, do: ["Character names must be at least 3 characters"], else: []
+    ref_errors = validate(ref)
 
     {:noreply, socket |> assign(:ref, ref) |> assign(:ref_errors, ref_errors)}
   end
 
+  # if the LV mounts, and the user just hits enter, put error
+  @impl true
+  def handle_event("search", %{"character-ref" => ""}, socket) do
+    {:noreply, assign(socket, :ref_errors, ["Character names must be at least 3 characters"])}
+  end
+
   @impl true
   def handle_event("search", %{"character-ref" => ref}, socket) do
-    case Characters.fetch(ref) do
-      {:ok, %Character{character_id: id}} ->
-        {:noreply, push_navigate(socket, to: ~p"/sessions/#{id}")}
-
+    with [] <- validate(ref),
+         {:ok, %Character{character_id: id}} <- Characters.fetch(ref) do
+      {:noreply, push_navigate(socket, to: ~p"/sessions/#{id}")}
+    else
       :not_found ->
         {:noreply, put_flash(socket, :error, "Character not found. Please double check the spelling and try again.")}
 
       :error ->
         Logger.error("Error fetching a character when a user searched for #{ref}")
         {:noreply, put_flash(socket, :error, "Uh oh, something went wrong on our end. Please try again")}
+
+      ref_errors when is_list(ref_errors) ->
+        {:noreply, assign(socket, :ref_errors, ref_errors)}
     end
+  end
+
+  defp validate(ref) do
+    validators = [
+      {String.length(ref) < 3, "Character names must be at least 3 characters"},
+      {String.contains?(ref, " "), "Character names cannot contain spaces"}
+    ]
+
+    for {true, error} <- validators, do: error
   end
 end

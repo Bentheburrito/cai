@@ -72,15 +72,19 @@ defmodule CAI.Characters do
   def fetch(0), do: :not_found
 
   def fetch(name) when is_binary(name) do
-    name_lower = String.downcase(name)
+    if String.length(name) < 3 do
+      :error
+    else
+      name_lower = String.downcase(name)
 
-    case Cachex.get(character_names(), name_lower) do
-      {:ok, nil} ->
-        query = term(@query_base, "name.first_lower", name_lower)
-        fetch_by_query(query, &put_character_in_caches/1)
+      case Cachex.get(character_names(), name_lower) do
+        {:ok, nil} ->
+          query = term(@query_base, "name.first_lower", name_lower)
+          fetch_by_query(query, &put_character_in_caches/1)
 
-      {:ok, character_id} ->
-        fetch(character_id)
+        {:ok, character_id} ->
+          fetch(character_id)
+      end
     end
   end
 
@@ -99,8 +103,7 @@ defmodule CAI.Characters do
     end
   end
 
-  def fetch(non_character_id) do
-    Logger.warning("Characters.fetch/1 called with non-character ID: #{inspect(non_character_id)}")
+  def fetch(_non_character_id) do
     :error
   end
 
@@ -113,7 +116,7 @@ defmodule CAI.Characters do
   def fetch_by_query(query, map_to \\ & &1, remaining_tries \\ @default_census_attempts)
 
   def fetch_by_query(_query, _map_to, remaining_tries) when remaining_tries == 0 do
-    Logger.error("remaining_tries == 0, returning :error")
+    Logger.error("fetch_by_query: remaining_tries == 0, returning :error")
     :error
   end
 
@@ -220,7 +223,7 @@ defmodule CAI.Characters do
         %{}
 
       {:error, e} ->
-        Logger.warning("CharacterCache query returned error (#{remaining_tries - 1} attempts remain): #{inspect(e)}")
+        Logger.warning("get_many_by_query returned error (#{remaining_tries - 1} attempts remain): #{inspect(e)}")
 
         get_many_by_query(query, remaining_tries - 1)
     end
