@@ -3,6 +3,9 @@ defmodule CAI.Application do
 
   use Application
 
+  import CAI.Cachex
+  import Cachex.Spec
+
   @impl true
   def start(_type, _args) do
     subscriptions = CAI.ess_subscriptions()
@@ -12,6 +15,13 @@ defmodule CAI.Application do
       clients: [CAI.ESS.Client],
       service_id: CAI.sid(),
       endpoint: "push.nanite-systems.net/streaming"
+    ]
+
+    static_data_opts = [
+      name: static_data(),
+      warmers: [
+        warmer(module: CAI.Cachex.StaticDataWarmer, state: [])
+      ]
     ]
 
     children = [
@@ -24,10 +34,12 @@ defmodule CAI.Application do
       # Start the Endpoint (http/https)
       CAIWeb.Endpoint,
       # Start our Cachex caches
-      Supervisor.child_spec({Cachex, name: :character_name_map}, id: :character_name_map),
-      Supervisor.child_spec({Cachex, name: :character_cache}, id: :character_cache),
-      Supervisor.child_spec({Cachex, name: :facility_cache}, id: :facility_cache),
-      Supervisor.child_spec({Cachex, name: :outfit_cache}, id: :outfit_cache),
+      Supervisor.child_spec({Cachex, name: character_names()}, id: character_names()),
+      Supervisor.child_spec({Cachex, name: characters()}, id: characters()),
+      Supervisor.child_spec({Cachex, name: facilities()}, id: facilities()),
+      Supervisor.child_spec({Cachex, name: outfits()}, id: outfits()),
+      Supervisor.child_spec({Cachex, static_data_opts}, id: static_data()),
+      # Start the ESS Client
       CAI.ESS.Client,
       # Start the ESS Socket
       {PS2.Socket, ess_opts}

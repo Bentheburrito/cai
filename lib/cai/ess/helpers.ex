@@ -75,7 +75,7 @@ defmodule CAI.ESS.Helpers do
         {:unavailable, other_id}
 
       {reason, other_id} ->
-        if CAI.character_id?(other_id) do
+        if CAI.Guards.character_id?(other_id) do
           Logger.warning("Couldn't fetch other character (ID #{inspect(other_id)}) for an event: #{inspect(reason)}")
         end
 

@@ -14,7 +14,7 @@ defmodule CAI.Characters.Session do
   import Ecto.Changeset
   import Ecto.Query
 
-  require CAI
+  require CAI.Guards
 
   alias CAI.Characters.Session
   alias CAI.{ESS, Repo}
@@ -183,7 +183,7 @@ defmodule CAI.Characters.Session do
   defp put_aggregates(changeset, _), do: changeset
 
   def put_aggregate_event(%GainExperience{} = ge, params, character_id) do
-    revive_add = if CAI.is_revive_xp(ge.experience_id) and ge.character_id == character_id, do: 1, else: 0
+    revive_add = if CAI.Guards.is_revive_xp(ge.experience_id) and ge.character_id == character_id, do: 1, else: 0
 
     params
     |> Map.update(:revive_count, revive_add, &(&1 + revive_add))
@@ -192,13 +192,13 @@ defmodule CAI.Characters.Session do
 
   def put_aggregate_event(%Death{} = death, params, character_id) do
     if death.character_id == character_id do
-      death_ivi_add = if CAI.weapons()[death.attacker_weapon_id]["sanction"] == "infantry", do: 1, else: 0
+      death_ivi_add = if CAI.get_weapon(death.attacker_weapon_id)["sanction"] == "infantry", do: 1, else: 0
 
       params
       |> Map.update(:death_count, 1, &(&1 + 1))
       |> Map.update(:death_ivi_count, death_ivi_add, &(&1 + death_ivi_add))
     else
-      kill_ivi_add = if CAI.weapons()[death.attacker_weapon_id]["sanction"] == "infantry", do: 1, else: 0
+      kill_ivi_add = if CAI.get_weapon(death.attacker_weapon_id)["sanction"] == "infantry", do: 1, else: 0
       kill_hs_add = if death.is_headshot, do: 1, else: 0
       kill_hs_ivi_add = if kill_ivi_add == 1 and kill_hs_add == 1, do: 1, else: 0
 
@@ -211,7 +211,7 @@ defmodule CAI.Characters.Session do
   end
 
   def put_aggregate_event(%VehicleDestroy{} = vd, params, character_id) do
-    vehicle_cost = CAI.vehicles()[vd.vehicle_id]["cost"]
+    vehicle_cost = CAI.get_vehicle(vd.vehicle_id)["cost"]
 
     if vd.character_id == character_id do
       params

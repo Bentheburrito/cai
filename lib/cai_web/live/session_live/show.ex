@@ -4,7 +4,7 @@ defmodule CAIWeb.SessionLive.Show do
   alias CAI.ESS.PlayerFacilityDefend
   use CAIWeb, :live_view
 
-  import CAI, only: [is_kill_xp: 1]
+  import CAI.Guards, only: [is_kill_xp: 1]
   import CAIWeb.ESSComponents
   import CAIWeb.Utils
 
