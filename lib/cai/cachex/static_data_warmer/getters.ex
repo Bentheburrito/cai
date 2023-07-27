@@ -9,6 +9,8 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
 
   If this project ever goes multi-node, though, persisting to disk could probably be avoid (or at least a last
   resort), as new nodes joining the cluster can sync to get cache states.
+
+  also need to find a better data source for vehicle costs than vehicle_cost_map...
   """
 
   import PS2.API.QueryBuilder
@@ -29,32 +31,7 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
         # default to an id/path that doesn't exist, so the `onerror` attribute in the template can take over
         default_image_info = %{"image_id" => -1, "image_path" => ""}
 
-        weapon_image_infos =
-          lines
-          |> Stream.map(&(&1 |> String.split(",") |> List.first()))
-          |> Stream.chunk_every(800)
-          |> Stream.map(fn item_ids ->
-            Query.new(collection: "item")
-            |> term("item_id", Enum.join(item_ids, ","))
-            |> limit(9000)
-            |> show(["item_id", "image_id", "image_path"])
-            |> tree(Tree.new(field: "item_id"))
-            |> PS2.API.query_one(CAI.sid())
-            |> case do
-              {:ok, %QueryResult{data: item_images}} ->
-                item_images
-
-              error ->
-                Logger.error("Failed to get weapon image chunk data: #{inspect(error)}")
-                %{}
-            end
-          end)
-          |> Enum.reduce(&Map.merge(&1, &2))
-          |> Stream.filter(fn {_key, value} -> value != "-" end)
-          |> Stream.map(fn {item_id, images} ->
-            {item_id, Map.update!(images, "image_id", &maybe_to_int(&1))}
-          end)
-          |> Enum.into(%{})
+        weapon_image_infos = fetch_weapon_image_info(lines)
 
         weapon_map =
           for line <- lines, into: %{} do
@@ -88,6 +65,34 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
       error ->
         error
     end
+  end
+
+  defp fetch_weapon_image_info(lines) do
+    lines
+    |> Stream.map(&(&1 |> String.split(",") |> List.first()))
+    |> Stream.chunk_every(800)
+    |> Stream.map(fn item_ids ->
+      Query.new(collection: "item")
+      |> term("item_id", Enum.join(item_ids, ","))
+      |> limit(9000)
+      |> show(["item_id", "image_id", "image_path"])
+      |> tree(Tree.new(field: "item_id"))
+      |> PS2.API.query_one(CAI.sid())
+      |> case do
+        {:ok, %QueryResult{data: item_images}} ->
+          item_images
+
+        error ->
+          Logger.error("Failed to get weapon image chunk data: #{inspect(error)}")
+          %{}
+      end
+    end)
+    |> Enum.reduce(&Map.merge(&1, &2))
+    |> Stream.filter(fn {_key, value} -> value != "-" end)
+    |> Stream.map(fn {item_id, images} ->
+      {item_id, Map.update!(images, "image_id", &maybe_to_int(&1))}
+    end)
+    |> Enum.into(%{})
   end
 
   @vehicle_url "https://raw.githubusercontent.com/cooltrain7/Planetside-2-API-Tracker/master/Census/vehicle.json"
@@ -192,7 +197,6 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
 
   defp maybe_to_int(value), do: value
 
-  # TODO: find a better data source for vehicle costs...
   defp vehicle_cost_map do
     %{
       "2009" => 0,

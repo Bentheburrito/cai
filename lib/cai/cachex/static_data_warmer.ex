@@ -33,8 +33,6 @@ defmodule CAI.Cachex.StaticDataWarmer do
 
         case query_static_data() do
           {:ok, pairs} ->
-            IO.inspect(is_list(pairs), label: "pairs is list?")
-            IO.inspect(is_map(pairs), label: "pairs is map?")
             Cachex.Disk.write(pairs, dump_path())
             Logger.info("Successfully fetched and dumped static data!")
             {:ok, pairs}
@@ -45,13 +43,13 @@ defmodule CAI.Cachex.StaticDataWarmer do
     end
   end
 
-  defp query_static_data() do
+  defp query_static_data do
     # Outer ok tuple is the result of the task from Task.async_stream, the inner ok tuple is from the Getters fxns
     reducer = fn
-      {:ok, {:ok, entries}}, acc -> {:cont, IO.inspect(Map.merge(acc, entries), label: "cont")}
-      {:ok, {:error, error}}, _acc -> {:halt, IO.inspect({:error, error}, label: "err query")}
-      {:exit, reason}, _acc -> {:halt, IO.inspect({:error, reason}, label: "err task stream")}
-      err, _acc -> {:halt, IO.inspect(err, label: "OH WTF")}
+      {:ok, {:ok, entries}}, acc -> {:cont, Map.merge(acc, entries)}
+      {:ok, {:error, error}}, _acc -> {:halt, {:error, error}}
+      {:exit, reason}, _acc -> {:halt, {:error, reason}}
+      err, _acc -> {:halt, err}
     end
 
     [
@@ -61,7 +59,6 @@ defmodule CAI.Cachex.StaticDataWarmer do
       &Getters.get_xp/0
     ]
     |> Task.async_stream(&get_data/1)
-    |> IO.inspect(label: "stream")
     |> Enum.reduce_while(%{}, reducer)
     |> case do
       {:error, _} = error_tuple -> error_tuple

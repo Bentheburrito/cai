@@ -6,10 +6,6 @@ defmodule CAIWeb.SessionLiveTest do
 
   alias CAI.Characters.Character
 
-  @create_attrs %{character: 42, faction_id: 42, name: "some name"}
-  @update_attrs %{character: 43, faction_id: 43, name: "some updated name"}
-  @invalid_attrs %{character: nil, faction_id: nil, name: nil}
-
   defp create_session(_) do
     {session, login, logout} = session_fixture()
     %{session: session, login: login, logout: logout}
