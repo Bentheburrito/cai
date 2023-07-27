@@ -7,8 +7,8 @@ defmodule CAI.Guards do
 
   import Bitwise
 
-  @xp_guard_data_path "./guard_data/xp.pairs"
-  def xp_guard_data_path, do: @xp_guard_data_path
+  @xp_guard_data_path System.get_env("GUARD_DATA_PATH", "./guard_data/xp.pairs")
+  def xp_guard_data_path, do: System.get_env("GUARD_DATA_PATH", "./guard_data/xp.pairs")
 
   @doc """
   Character IDs are always odd.
