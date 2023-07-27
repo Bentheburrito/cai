@@ -14,7 +14,7 @@ defmodule CAIWeb.SessionLive.Entry do
   which case "(x2)" would be appended to the regular message.
   """
 
-  import CAI, only: [is_kill_xp: 1]
+  import CAI.Guards, only: [is_kill_xp: 1]
 
   alias CAI.Characters
   alias CAI.ESS.{Death, FacilityControl, GainExperience, PlayerFacilityCapture, PlayerFacilityDefend}

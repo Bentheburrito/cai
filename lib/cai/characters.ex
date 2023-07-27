@@ -4,7 +4,8 @@ defmodule CAI.Characters do
   sessions. Manages caches and retries automatically.
   """
 
-  import CAI, only: [is_character_id: 1]
+  import CAI.Cachex
+  import CAI.Guards, only: [is_character_id: 1]
   import Ecto.Query, warn: false
   import PS2.API.QueryBuilder, except: [field: 2]
 
@@ -59,7 +60,7 @@ defmodule CAI.Characters do
   @doc """
   Get a `Character` by their ID or name.
 
-  The function first checks `:character_cache`, and falls back to a Census query on cache miss. The cache is updated
+  The function first checks `characters()`, and falls back to a Census query on cache miss. The cache is updated
   on miss. Cache entries last for #{@cache_ttl_ms} milliseconds.
 
   Returns an ok tuple with the character struct on success. If the cache misses and Census returns no results,
@@ -73,7 +74,7 @@ defmodule CAI.Characters do
   def fetch(name) when is_binary(name) do
     name_lower = String.downcase(name)
 
-    case Cachex.get(:character_name_map, name_lower) do
+    case Cachex.get(character_names(), name_lower) do
       {:ok, nil} ->
         query = term(@query_base, "name.first_lower", name_lower)
         fetch_by_query(query, &put_character_in_caches/1)
@@ -84,9 +85,8 @@ defmodule CAI.Characters do
   end
 
   def fetch(character_id) when is_character_id(character_id) do
-    with {:ok, %Character{} = char} <- Cachex.get(:character_cache, character_id),
-         {:ok, true} <-
-           Cachex.put(:character_name_map, char.name_first_lower, character_id, @put_opts) do
+    with {:ok, %Character{} = char} <- Cachex.get(characters(), character_id),
+         {:ok, true} <- Cachex.put(character_names(), char.name_first_lower, character_id, @put_opts) do
       {:ok, char}
     else
       {:ok, nil} ->
@@ -94,7 +94,7 @@ defmodule CAI.Characters do
         fetch_by_query(query, &put_character_in_caches/1)
 
       {:error, _} ->
-        Logger.error("Could not access :character_cache")
+        Logger.error("Could not access cache CAI.Cachex.characters()")
         :error
     end
   end
@@ -135,8 +135,8 @@ defmodule CAI.Characters do
   defp put_character_in_caches(data) do
     case %Character{} |> Character.changeset(data) |> Changeset.apply_action(:update) do
       {:ok, char} ->
-        Cachex.put(:character_cache, char.character_id, char, @put_opts)
-        Cachex.put(:character_name_map, char.name_first_lower, char.character_id, @put_opts)
+        Cachex.put(characters(), char.character_id, char, @put_opts)
+        Cachex.put(character_names(), char.name_first_lower, char.character_id, @put_opts)
         char
 
       {:error, %Changeset{} = changeset} ->
@@ -149,7 +149,7 @@ defmodule CAI.Characters do
   defp put_outfit_in_cache(data) do
     case %Outfit{} |> Outfit.changeset(data) |> Changeset.apply_action(:update) do
       {:ok, outfit} ->
-        Cachex.put(:outfit_cache, outfit.outfit_id, outfit, ttl: round(@cache_ttl_ms / 2))
+        Cachex.put(outfits(), outfit.outfit_id, outfit, ttl: round(@cache_ttl_ms / 2))
         outfit
 
       {:error, %Changeset{} = changeset} ->
@@ -172,7 +172,7 @@ defmodule CAI.Characters do
     # Step 1: Check the cache for these IDs, keeping track of IDs that are not in the cache.
     for id when is_character_id(id) <- character_ids, reduce: {[], %{}} do
       {uncached_ids, character_map} ->
-        case Cachex.get(:character_cache, id) do
+        case Cachex.get(characters(), id) do
           {:ok, %Character{} = char} ->
             {uncached_ids, Map.put(character_map, char.character_id, char)}
 
@@ -180,7 +180,7 @@ defmodule CAI.Characters do
             {[id | uncached_ids], Map.put(character_map, id, :not_found)}
 
           {:error, _} ->
-            Logger.error("Could not access :character_cache")
+            Logger.error("Could not access CAI.Cachex.characters()")
             {uncached_ids, character_map}
         end
     end
@@ -235,8 +235,8 @@ defmodule CAI.Characters do
 
     case maybe_character do
       {:ok, %Character{character_id: character_id} = character} ->
-        Cachex.put(:character_cache, character_id, character, @put_opts)
-        Cachex.put(:character_name_map, character.name_first_lower, character_id, @put_opts)
+        Cachex.put(characters(), character_id, character, @put_opts)
+        Cachex.put(character_names(), character.name_first_lower, character_id, @put_opts)
         Map.put(character_map, character_id, character)
 
       {:error, changeset} ->
@@ -250,7 +250,7 @@ defmodule CAI.Characters do
   Get an outfit by its ID.
   """
   def fetch_outfit(outfit_id) when is_integer(outfit_id) do
-    case Cachex.get(:outfit_cache, outfit_id) do
+    case Cachex.get(outfits(), outfit_id) do
       {:ok, %Outfit{} = outfit} ->
         {:ok, %Outfit{} = outfit}
 
@@ -261,7 +261,7 @@ defmodule CAI.Characters do
         |> fetch_by_query(&put_outfit_in_cache/1)
 
       {:error, _} ->
-        Logger.error("Could not access :outfit_cache")
+        Logger.error("Could not access CAI.Cachex.outfits()")
         :error
     end
   end

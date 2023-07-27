@@ -9,7 +9,7 @@ defmodule CAIWeb.ESSComponents do
     endpoint: CAIWeb.Endpoint,
     router: CAIWeb.Router
 
-  import CAI, only: [is_character_id: 1, is_revive_xp: 1, is_assist_xp: 1, is_gunner_assist_xp: 1]
+  import CAI.Guards, only: [is_character_id: 1, is_revive_xp: 1, is_assist_xp: 1, is_gunner_assist_xp: 1]
   import CAIWeb.CoreComponents, only: [hover_timestamp: 1]
 
   alias CAI.Characters.Character
@@ -85,7 +85,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   def build_event_log_item(assigns, %PlayerFacilityCapture{facility_id: facility_id}, _c_id) do
-    facility = CAI.facilities()[facility_id]
+    facility = CAI.get_facility(facility_id)
 
     facility_type_text =
       if facility["facility_type"] in ["Small Outpost", "Large Outpost", "Large CTF Outpost", "Small CTF Outpost"] do
@@ -109,7 +109,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   def build_event_log_item(assigns, %PlayerFacilityDefend{facility_id: facility_id}, _c_id) do
-    facility = CAI.facilities()[facility_id]
+    facility = CAI.get_facility(facility_id)
 
     facility_type_text =
       if facility["facility_type"] in ["Small Outpost", "Large Outpost", "Large CTF Outpost", "Small CTF Outpost"] do
@@ -139,9 +139,10 @@ defmodule CAIWeb.ESSComponents do
         _c_id
       ) do
     ~H"""
-    <%= link_character(@character, @event.team_id) %> destroyed their <%= CAI.vehicles()[
-      @event.vehicle_id
-    ]["name"] %> with <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
+    <%= link_character(@character, @event.team_id) %> destroyed their <%= CAI.get_vehicle(@event.vehicle_id)["name"] %> with <%= get_weapon_name(
+      @event.attacker_weapon_id,
+      @event.attacker_vehicle_id
+    ) %>
     """
   end
 
@@ -151,10 +152,10 @@ defmodule CAIWeb.ESSComponents do
       if @character.character_id == @event.character_id, do: {@other, @character}, else: {@character, @other} %>
     <%= link_character(attacker, @event.attacker_team_id) %> destroyed
     <%= link_character(character, @event.team_id, true) %>
-    <%= CAI.vehicles()[@event.vehicle_id]["name"] %> with
+    <%= CAI.get_vehicle(@event.vehicle_id)["name"] %> with
     <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
     <%= (@event.attacker_vehicle_id != 0 &&
-           " while in a #{CAI.vehicles()[@event.attacker_vehicle_id]["name"]}") || "" %>
+           " while in a #{CAI.get_vehicle(@event.attacker_vehicle_id)["name"]}") || "" %>
     """
   end
 
@@ -185,7 +186,7 @@ defmodule CAIWeb.ESSComponents do
   # Gunner gets a kill
   def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
       when is_gunner_assist_xp(id) do
-    %{"description" => desc} = CAI.xp()[id]
+    %{"description" => desc} = CAI.get_xp(id)
     desc_downcase = String.downcase(desc)
 
     # {VehicleKilled} kill by {VehicleKiller} gunner{?}
@@ -302,8 +303,8 @@ defmodule CAIWeb.ESSComponents do
     <img
       :for={{:ok, icon_url} <- [CAI.xp_icon(@ge.experience_id, @ge.team_id)]}
       src={icon_url}
-      alt={CAI.xp()[@ge.experience_id]["description"]}
-      title={"#{CAI.xp()[@ge.experience_id]["description"]}, #{@ge.amount} XP"}
+      alt={CAI.get_xp(@ge.experience_id)["description"]}
+      title={"#{CAI.get_xp(@ge.experience_id)["description"]}, #{@ge.amount} XP"}
       class="inline object-contain h-8"
     />
     """
@@ -390,6 +391,6 @@ defmodule CAIWeb.ESSComponents do
   end
 
   defp get_weapon_name(weapon_id, _) do
-    "#{CAI.weapons()[weapon_id]["name"]}"
+    "#{CAI.get_weapon(weapon_id)["name"]}"
   end
 end

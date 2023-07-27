@@ -1,7 +1,7 @@
 defmodule CAI.Auraxis.Facilities do
   @moduledoc """
-  A GenServer that manages the :facility_cache, updating it via the FacilityControl, PlayerFacilityCapture, and
-  PlayerFacilityDefends events.
+  A GenServer that manages the CAI.Cachex.facilities() cache, updating it via the FacilityControl,
+  PlayerFacilityCapture, and PlayerFacilityDefends events.
   """
 
   defmodule Entry do
@@ -11,6 +11,8 @@ defmodule CAI.Auraxis.Facilities do
   end
 
   use GenServer
+
+  import CAI.Cachex
 
   alias CAI.ESS.{FacilityControl, PlayerFacilityCapture, PlayerFacilityDefend}
 
@@ -28,7 +30,7 @@ defmodule CAI.Auraxis.Facilities do
   def get_facility_control_for(%mod{} = event) when mod in [PlayerFacilityCapture, PlayerFacilityDefend] do
     %{world_id: world_id, zone_id: zone_id, facility_id: facility_id} = event
 
-    case Cachex.get(:facility_cache, {world_id, zone_id, facility_id}) do
+    case Cachex.get(facilities(), {world_id, zone_id, facility_id}) do
       {:ok, %Entry{latest_facility_control: fc_event}} -> {:ok, fc_event}
       {:ok, nil} -> :none
     end
@@ -46,7 +48,7 @@ defmodule CAI.Auraxis.Facilities do
   @impl true
   def handle_info({:event, %FacilityControl{} = event}, state) do
     entry = %Entry{latest_facility_control: event}
-    {:ok, true} = Cachex.put(:facility_cache, {event.world_id, event.zone_id, event.facility_id}, entry)
+    {:ok, true} = Cachex.put(facilities(), {event.world_id, event.zone_id, event.facility_id}, entry)
     {:noreply, state}
   end
 end
