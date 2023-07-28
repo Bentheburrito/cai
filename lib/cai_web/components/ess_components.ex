@@ -12,8 +12,8 @@ defmodule CAIWeb.ESSComponents do
   import CAI.Guards, only: [is_character_id: 1, is_revive_xp: 1, is_assist_xp: 1, is_gunner_assist_xp: 1]
   import CAIWeb.CoreComponents, only: [hover_timestamp: 1]
 
-  alias CAI.Characters.Outfit
   alias CAI.Characters.Character
+  alias CAI.Characters.Outfit
 
   alias CAI.ESS.{
     BattleRankUp,
