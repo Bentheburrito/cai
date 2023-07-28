@@ -6,11 +6,13 @@
   </div>
 
   <% {login, logout} = @timestamps %>
-  <div :if={not @live?} class="flex-col">
+  <div class="flex-col">
     <h3 class="m-2">
+      <% logout = if @live? and assigns[:last_entry], do: @last_entry.event.timestamp, else: logout %>
       Session from <.timestamp id="session-login" unix_timestamp={login} class="font-bold" /> to
       <.timestamp id="session-logout" unix_timestamp={logout} class="font-bold" />
       <br /> Lasted <span class="font-bold"><%= format_duration(login, logout) %></span>
+      <%= if @live?, do: "so far (times update every event)" %>
     </h3>
   </div>
 </div>

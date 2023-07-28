@@ -4,7 +4,7 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
 
   ## TODO:
 
-  need to find a better data source for vehicle costs than vehicle_cost_map...
+  need to find a better data source for vehicle costs than vehicle_cost_logo_map...
   """
 
   import PS2.API.QueryBuilder
@@ -95,11 +95,11 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
       {:ok, res} ->
         res_map = Jason.decode!(res.body)
 
-        cost_map = vehicle_cost_map()
+        cost_map = vehicle_cost_logo_map()
 
         vehicle_map =
           for vehicle <- res_map["vehicle_list"], into: %{} do
-            cost = cost_map[vehicle["vehicle_id"]] || 0
+            {cost, logo_path} = cost_map[vehicle["vehicle_id"]] || {0, nil}
 
             {{:vehicle, maybe_to_int(vehicle["vehicle_id"])},
              %{
@@ -108,6 +108,7 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
                "cost" => cost,
                "currency_id" => vehicle["cost_resource_id"],
                "image_path" => vehicle["image_path"],
+               "logo_path" => logo_path,
                "type_id" => vehicle["type_id"]
              }}
           end
@@ -191,55 +192,66 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
 
   defp maybe_to_int(value), do: value
 
-  defp vehicle_cost_map do
+  defp vehicle_cost_logo_map do
     %{
-      "2009" => 0,
-      "7" => 350,
-      "2128" => 0,
-      "14" => 250,
-      "8" => 350,
-      "2123" => 0,
-      "101" => 0,
-      "5" => 450,
-      "6" => 450,
-      "100" => 0,
-      "2010" => 50,
-      "2124" => 0,
-      "2039" => 0,
-      "2040" => 0,
-      "3" => 350,
-      "161" => 0,
-      "163" => 0,
-      "160" => 0,
-      "2033" => 10,
-      "15" => 200,
-      "2122" => 0,
-      "150" => 0,
-      "12" => 150,
-      "104" => 0,
-      "2007" => 1_000_000,
-      "0" => 0,
-      "2021" => 0,
-      "11" => 450,
-      "10" => 450,
-      "2036" => 0,
-      "151" => 0,
-      "1012" => 0,
-      "2019" => 1_000_000,
-      "105" => 0,
-      "2006" => 0,
-      "102" => 0,
-      "2" => 200,
-      "2011" => 0,
-      "162" => 0,
-      "2008" => 0,
-      "4" => 450,
-      "1013" => 0,
-      "13" => 0,
-      "9" => 350,
-      "103" => 0,
-      "1" => 50,
-      "2125" => 100
+      "2009" => {0, nil},
+      "7" => {350, PS2.API.get_image_url("/files/ps2/images/static/77944.png")},
+      "2128" => {0, nil},
+      "14" => {250, PS2.API.get_image_url("/files/ps2/images/static/79813.png")},
+      "8" => {350, PS2.API.get_image_url("/files/ps2/images/static/77941.png")},
+      "2123" => {0, PS2.API.get_image_url("/files/ps2/images/static/77941.png")},
+      "101" => {0, nil},
+      "5" => {450, PS2.API.get_image_url("/files/ps2/images/static/77943.png")},
+      "6" => {450, PS2.API.get_image_url("/files/ps2/images/static/77939.png")},
+      "100" => {0, nil},
+      "2010" => {50, PS2.API.get_image_url("/files/ps2/images/static/77940.png")},
+      "2124" => {350, PS2.API.get_image_url("/files/ps2/images/static/77944.png")},
+      "2039" => {200, PS2.API.get_image_url("/files/ps2/images/static/84728.png")},
+      "2040" => {0, PS2.API.get_image_url("/files/ps2/images/static/79813.png")},
+      "3" => {350, PS2.API.get_image_url("/files/ps2/images/static/77936.png")},
+      "161" => {0, nil},
+      "163" => {0, nil},
+      "160" => {0, nil},
+      "2033" => {10, nil},
+      "15" => {200, PS2.API.get_image_url("/files/ps2/images/static/84728.png")},
+      "2122" => {0, PS2.API.get_image_url("/files/ps2/images/static/77938.png")},
+      "150" => {0, nil},
+      "12" => {150, PS2.API.get_image_url("/files/ps2/images/static/77934.png")},
+      "104" => {0, nil},
+      "2007" => {1_000_000, nil},
+      "0" => {0, nil},
+      "2021" => {0, nil},
+      "11" => {450, PS2.API.get_image_url("/files/ps2/images/static/77933.png")},
+      "10" => {450, PS2.API.get_image_url("/files/ps2/images/static/77935.png")},
+      "2036" => {0, nil},
+      "151" => {0, nil},
+      "1012" => {0, nil},
+      "2019" => {1_000_000, nil},
+      "105" => {0, nil},
+      "2006" => {0, nil},
+      "102" => {0, nil},
+      "2" => {200, PS2.API.get_image_url("/files/ps2/images/static/77942.png")},
+      "2011" => {0, nil},
+      "162" => {0, nil},
+      "2008" => {0, nil},
+      "4" => {450, PS2.API.get_image_url("/files/ps2/images/static/77937.png")},
+      "1013" => {0, nil},
+      "13" => {0, nil},
+      "9" => {350, PS2.API.get_image_url("/files/ps2/images/static/77938.png")},
+      "103" => {0, nil},
+      "1" => {50, PS2.API.get_image_url("/files/ps2/images/static/77940.png")},
+      "2125" => {100, nil},
+      "2130" => {200, PS2.API.get_image_url("/files/ps2/images/static/77942.png")},
+      "2131" => {450, PS2.API.get_image_url("/files/ps2/images/static/77933.png")},
+      "2132" => {250, PS2.API.get_image_url("/files/ps2/images/static/79813.png")},
+      "2133" => {450, PS2.API.get_image_url("/files/ps2/images/static/77937.png")},
+      "2134" => {450, PS2.API.get_image_url("/files/ps2/images/static/77943.png")},
+      "2135" => {450, PS2.API.get_image_url("/files/ps2/images/static/77939.png")},
+      "2136" => {350, PS2.API.get_image_url("/files/ps2/images/static/39607.png")},
+      "2137" => {450, PS2.API.get_image_url("/files/ps2/images/static/39604.png")},
+      "2139" => {200, PS2.API.get_image_url("/files/ps2/images/static/77942.png")},
+      "2140" => {450, PS2.API.get_image_url("/files/ps2/images/static/77933.png")},
+      "2141" => {250, PS2.API.get_image_url("/files/ps2/images/static/79813.png")}
     }
   end
 end

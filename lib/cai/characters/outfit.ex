@@ -3,6 +3,8 @@ defmodule CAI.Characters.Outfit do
   Ecto embedded schema for a character's outfit
   """
 
+  alias CAI.Characters.Outfit
+
   use Ecto.Schema
   import Ecto.Changeset
   @primary_key false
@@ -36,6 +38,9 @@ defmodule CAI.Characters.Outfit do
     # Aliases are apparently not required
     |> validate_required(@fields |> List.delete(:alias) |> List.delete(:member_since_date))
   end
+
+  def alias_or_name(%Outfit{alias: alias}) when alias not in [nil, ""], do: "[" <> alias <> "]"
+  def alias_or_name(%Outfit{name: name}), do: name
 
   defp format_census_date(date_string) when date_string in [nil, ""], do: nil
   defp format_census_date(date_string), do: date_string <> "Z"

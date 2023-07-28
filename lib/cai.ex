@@ -90,6 +90,35 @@ defmodule CAI do
       }
     }
 
+  def loadouts do
+    %{
+      1 => %{class_name: "Infiltrator", faction_id: 2, profile_id: 2},
+      3 => %{class_name: "Light Assault", faction_id: 2, profile_id: 4},
+      4 => %{class_name: "Medic", faction_id: 2, profile_id: 5},
+      5 => %{class_name: "Engineer", faction_id: 2, profile_id: 6},
+      6 => %{class_name: "Heavy Assault", faction_id: 2, profile_id: 7},
+      7 => %{class_name: "MAX", faction_id: 2, profile_id: 8},
+      8 => %{class_name: "Infiltrator", faction_id: 3, profile_id: 10},
+      10 => %{class_name: "Light Assault", faction_id: 3, profile_id: 12},
+      11 => %{class_name: "Medic", faction_id: 3, profile_id: 13},
+      12 => %{class_name: "Engineer", faction_id: 3, profile_id: 14},
+      13 => %{class_name: "Heavy Assault", faction_id: 3, profile_id: 15},
+      14 => %{class_name: "MAX", faction_id: 3, profile_id: 16},
+      15 => %{class_name: "Infiltrator", faction_id: 1, profile_id: 17},
+      17 => %{class_name: "Light Assault", faction_id: 1, profile_id: 19},
+      18 => %{class_name: "Medic", faction_id: 1, profile_id: 20},
+      19 => %{class_name: "Engineer", faction_id: 1, profile_id: 21},
+      20 => %{class_name: "Heavy Assault", faction_id: 1, profile_id: 22},
+      21 => %{class_name: "MAX", faction_id: 1, profile_id: 23},
+      28 => %{class_name: "Infiltrator", faction_id: 4, profile_id: 190},
+      29 => %{class_name: "Light Assault", faction_id: 4, profile_id: 191},
+      30 => %{class_name: "Medic", faction_id: 4, profile_id: 192},
+      31 => %{class_name: "Engineer", faction_id: 4, profile_id: 193},
+      32 => %{class_name: "Heavy Assault", faction_id: 4, profile_id: 194},
+      45 => %{class_name: "MAX", faction_id: 4, profile_id: 252}
+    }
+  end
+
   def ess_subscriptions do
     [
       events: [
