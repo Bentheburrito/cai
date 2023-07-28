@@ -248,7 +248,7 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
       "2134" => {450, PS2.API.get_image_url("/files/ps2/images/static/77943.png")},
       "2135" => {450, PS2.API.get_image_url("/files/ps2/images/static/77939.png")},
       "2136" => {350, PS2.API.get_image_url("/files/ps2/images/static/39607.png")},
-      "2137" => {450, PS2.API.get_image_url("/files/ps2/images/static/39604.png")},
+      "2137" => {450, "/images/93604.png"},
       "2139" => {200, PS2.API.get_image_url("/files/ps2/images/static/77942.png")},
       "2140" => {450, PS2.API.get_image_url("/files/ps2/images/static/77933.png")},
       "2141" => {250, PS2.API.get_image_url("/files/ps2/images/static/79813.png")}
