@@ -6,16 +6,20 @@
   </div>
 
   <% {login, logout} = @timestamps %>
-  <% logout = if @live? and assigns[:last_entry], do: @last_entry.event.timestamp, else: logout %>
   <div class="flex-col">
     <h3 class="m-2">
-      Session from <.timestamp id="session-login" unix_timestamp={login} class="font-bold" /> to
-      <.timestamp id="session-logout" unix_timestamp={logout} class="font-bold" />
-      <br /> Lasted <span class="font-bold"><%= format_duration(login, logout) %></span>
-      <%= if @live?, do: "so far (times update every event)" %>
+      <%= if logout != :offline do %>
+        Session from <.timestamp id="session-login" unix_timestamp={login} class="font-bold" /> to
+        <.timestamp id="session-logout" unix_timestamp={logout} class="font-bold" />
+        <br /> Lasted <span class="font-bold"><%= format_duration(login, logout) %></span>
+      <% else %>
+        <%= @character.name_first %> is offline.
+      <% end %>
     </h3>
   </div>
 </div>
+
+<% duration_mins = if logout != :offline, do: Float.round((logout - login) / 60, 2), else: 0 %>
 
 <div :if={assigns[:aggregates]}>
   <h3 class="m-2">
@@ -56,7 +60,6 @@
           <%= Float.round(safe_divide(@aggregates.kill_ivi_count, @aggregates.death_ivi_count), 2) %>
         </td>
       </tr>
-      <% duration_mins = Float.round((logout - login) / 60, 2) %>
       <tr>
         <td class="p-1 pl-2 border-r" title="Kills/Minute">KPM</td>
         <td class="p-1 pl-2" title={"# total kills / minutes played => #{@aggregates.kill_count} / #{duration_mins}"}>
