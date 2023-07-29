@@ -182,7 +182,7 @@ defmodule CAIWeb.SessionLive.Show do
     liveview = self()
 
     Task.start_link(fn ->
-      entries = Entry.map(events_to_stream, character)
+      entries = Entry.map(events_to_stream, [character])
       send(liveview, {:bulk_append, entries, new_events_limit})
     end)
   end
@@ -219,7 +219,7 @@ defmodule CAIWeb.SessionLive.Show do
       {:ok, group} ->
         character = socket.assigns.character
 
-        other_map =
+        character_map =
           with [%{character_id: _} | _] <- group.bonuses,
                {_, char_id, other_id} = pending_key,
                placeholder_event = %GainExperience{character_id: char_id, other_id: other_id},
@@ -229,8 +229,9 @@ defmodule CAIWeb.SessionLive.Show do
             {:unavailable, other_id} -> %{other_id => {:unavailable, other_id}}
             _ -> %{}
           end
+          |> Map.put(character.character_id, character)
 
-        entries = Entry.from_groups(%{pending_key => group}, [], character, other_map)
+        entries = Entry.from_groups(%{pending_key => group}, [], character_map)
 
         {
           :noreply,

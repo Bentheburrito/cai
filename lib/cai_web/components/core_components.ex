@@ -16,6 +16,7 @@ defmodule CAIWeb.CoreComponents do
   """
   use Phoenix.Component
 
+  alias CAIWeb.Utils
   alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
   import CAIWeb.Gettext
@@ -638,8 +639,19 @@ defmodule CAIWeb.CoreComponents do
     <.header>
       <img class="h-20 w-20" src={CAI.factions()[@character.faction_id].image} />
 
-      <span :if={@character.outfit}>[<%= @character.outfit.alias %>]</span>
-      <%= @character.name_first %>
+      <div class="whitespace-nowrap w-[fit-content]">
+        <span :if={@character.outfit}>[<%= @character.outfit.alias %>]</span>
+        <%= @character.name_first %> |
+        Battle Rank <%= @character.battle_rank %>
+
+        <div class="h-1 bg-neutral-200 dark:bg-neutral-600" title="Progress to next Battle Rank">
+          <div
+            class={"h-1 #{Utils.faction_css_classes(@character.faction_id, nil)} brightness-150"}
+            style={"width: #{round(@character.percent_to_next_br)}%"}
+          >
+          </div>
+        </div>
+      </div>
 
       <:subtitle><%= @character.character_id %></:subtitle>
     </.header>
