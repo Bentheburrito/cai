@@ -102,6 +102,7 @@ defmodule CAIWeb.SessionLive.Show do
 
       # If the character is currently online, let's build the session so far
       online? = Helpers.online?(character.character_id, timestamps)
+
       aggregates =
         with true <- online?,
              [{login, logout} | _] <- timestamps,
@@ -247,12 +248,13 @@ defmodule CAIWeb.SessionLive.Show do
   # Live Session - Update the `logout` time every few seconds, unless the character is no longer online.
   @impl true
   def handle_info(:time_update, socket) do
-    last_entry = Map.get_lazy(socket.assigns, :last_entry, fn ->
-      case socket.assigns.timestamps do
-        {_login, :offline} -> Entry.new(%MetagameEvent{timestamp: 0}, %{})
-        {_login, logout} -> Entry.new(%MetagameEvent{timestamp: logout}, %{})
-      end
-    end)
+    last_entry =
+      Map.get_lazy(socket.assigns, :last_entry, fn ->
+        case socket.assigns.timestamps do
+          {_login, :offline} -> Entry.new(%MetagameEvent{timestamp: 0}, %{})
+          {_login, logout} -> Entry.new(%MetagameEvent{timestamp: logout}, %{})
+        end
+      end)
 
     if Helpers.online?(last_entry.event) do
       {login, _logout} = Map.fetch!(socket.assigns, :timestamps)
