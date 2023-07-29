@@ -27,6 +27,8 @@ defmodule CAIWeb.ESSComponents do
     VehicleDestroy
   }
 
+  alias CAIWeb.Utils
+
   require Logger
 
   attr(:entry, :map)
@@ -39,7 +41,7 @@ defmodule CAIWeb.ESSComponents do
       |> Map.put(:character, @entry.character)
       |> Map.put(:other, @entry.other)
       |> Map.put(:event, @entry.event) %>
-    <%= unless (log = build_event_log_item(assigns, @entry.event, @entry.character.character_id)) == "" do %>
+    <%= unless (log = build_event_log_item(assigns, @entry.event)) == "" do %>
       <div
         id={@id}
         phx-mounted={
@@ -60,14 +62,14 @@ defmodule CAIWeb.ESSComponents do
     """
   end
 
-  def build_event_log_item(assigns, %BattleRankUp{}, _c_id) do
+  def build_event_log_item(assigns, %BattleRankUp{}) do
     ~H"""
     <%= link_character(@character) %> ranked up to Battle Rank <%= @event.battle_rank %>
     """
   end
 
   # Suicide
-  def build_event_log_item(assigns, %Death{character_id: char_id, attacker_character_id: char_id}, _c_id) do
+  def build_event_log_item(assigns, %Death{character_id: char_id, attacker_character_id: char_id}) do
     ~H"""
     <%= link_character(@character,
       loadout_id: @event.character_loadout_id,
@@ -77,20 +79,20 @@ defmodule CAIWeb.ESSComponents do
     """
   end
 
-  def build_event_log_item(assigns, %Death{}, _c_id) do
+  def build_event_log_item(assigns, %Death{}) do
     ~H"""
-    <% {attacker, character} =
-      if @character.character_id == @event.character_id, do: {@other, @character}, else: {@character, @other} %>
-    <%= link_character(attacker,
+    <% opts = [
       loadout_id: @event.attacker_loadout_id,
       team_id: @event.attacker_team_id,
       vehicle_id: @event.attacker_vehicle_id
-    ) %> killed <%= link_character(character, loadout_id: @event.character_loadout_id, team_id: @event.team_id) %> with
+    ] %>
+    <%= link_character(@other, opts) %> killed
+    <%= link_character(@character, loadout_id: @event.character_loadout_id, team_id: @event.team_id) %> with
     <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
     """
   end
 
-  def build_event_log_item(assigns, %PlayerFacilityCapture{facility_id: facility_id}, _c_id) do
+  def build_event_log_item(assigns, %PlayerFacilityCapture{facility_id: facility_id}) do
     facility = CAI.get_facility(facility_id)
 
     facility_type_text =
@@ -114,7 +116,7 @@ defmodule CAIWeb.ESSComponents do
     """
   end
 
-  def build_event_log_item(assigns, %PlayerFacilityDefend{facility_id: facility_id}, _c_id) do
+  def build_event_log_item(assigns, %PlayerFacilityDefend{facility_id: facility_id}) do
     facility = CAI.get_facility(facility_id)
 
     facility_type_text =
@@ -139,11 +141,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Destroyed own vehicle
-  def build_event_log_item(
-        assigns,
-        %VehicleDestroy{character_id: character_id, attacker_character_id: character_id},
-        _c_id
-      ) do
+  def build_event_log_item(assigns, %VehicleDestroy{character_id: character_id, attacker_character_id: character_id}) do
     ~H"""
     <%= link_character(@character, loadout_id: @event.attacker_loadout_id, team_id: @event.team_id) %> destroyed their <%= CAI.get_vehicle(
       @event.vehicle_id
@@ -151,62 +149,56 @@ defmodule CAIWeb.ESSComponents do
     """
   end
 
-  def build_event_log_item(assigns, %VehicleDestroy{}, _c_id) do
+  def build_event_log_item(assigns, %VehicleDestroy{}) do
     ~H"""
-    <% {attacker, character} =
-      if @character.character_id == @event.character_id, do: {@other, @character}, else: {@character, @other} %>
-    <%= link_character(attacker,
+    <% opts = [
       loadout_id: @event.attacker_loadout_id,
       team_id: @event.attacker_team_id,
       vehicle_id: @event.attacker_vehicle_id
-    ) %> destroyed <%= link_character(character, team_id: @event.team_id, possessive?: true, vehicle_id: @event.vehicle_id) %>
+    ] %>
+    <%= link_character(@other, opts) %> destroyed
+    <%= link_character(@character, team_id: @event.team_id, possessive?: true, vehicle_id: @event.vehicle_id) %>
     <%= CAI.get_vehicle(@event.vehicle_id)["name"] %> with
     <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
     """
   end
 
   # Kill assist
-  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
-      when is_assist_xp(id) do
+  def build_event_log_item(assigns, %GainExperience{experience_id: id}) when is_assist_xp(id) do
     ~H"""
-    <%= link_character(@character, loadout_id: @event.loadout_id, team_id: @event.team_id) %> assisted in killing <%= link_character(
-      @other
-    ) %>
+    <%= link_character(@character, loadout_id: @event.loadout_id, team_id: @event.team_id) %> assisted in killing
+    <%= link_character(@other) %>
     """
   end
 
-  # Got revived by someone
-  def build_event_log_item(assigns, %GainExperience{experience_id: id, other_id: char_id}, char_id)
-      when is_revive_xp(id) do
-    ~H"""
-    <%= link_character(@other, loadout_id: @event.loadout_id) %> revived <%= link_character(@character) %>
-    """
-  end
-
-  # Revived someone
-  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
-      when is_revive_xp(id) do
+  # Revived (or got revived by) someone
+  def build_event_log_item(assigns, %GainExperience{experience_id: id}) when is_revive_xp(id) do
     ~H"""
     <%= link_character(@character, loadout_id: @event.loadout_id) %> revived <%= link_character(@other) %>
     """
   end
 
   # Gunner gets a kill
-  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
-      when is_gunner_assist_xp(id) do
+  def build_event_log_item(assigns, %GainExperience{experience_id: id}) when is_gunner_assist_xp(id) do
     %{"description" => desc} = CAI.get_xp(id)
-    desc_downcase = String.downcase(desc)
+
+    clean_vehicle_gunner = fn raw ->
+      case String.trim_trailing(raw, "Gunner") do
+        "Lib " <> rest -> "Liberator " <> rest
+        trimmed -> trimmed
+      end
+    end
 
     # {VehicleKilled} kill by {VehicleKiller} gunner{?}
     assigns =
-      case String.split(desc_downcase, " kill by ") do
-        ["player", vehicle_killer_gunner] ->
-          %{vehicle_killer: String.trim_trailing(vehicle_killer_gunner, "gunner")}
+      case String.split(desc, [" kill by ", " Kill by "]) do
+        ["Player", vehicle_killer_gunner] ->
+          %{vehicle_killer: clean_vehicle_gunner.(vehicle_killer_gunner)}
 
         [vehicle_killed, vehicle_killer_gunner] ->
           %{
             vehicle_killed: vehicle_killed,
-            vehicle_killer: String.trim_trailing(vehicle_killer_gunner, "gunner")
+            vehicle_killer: clean_vehicle_gunner.(vehicle_killer_gunner)
           }
 
         _ ->
@@ -214,7 +206,7 @@ defmodule CAIWeb.ESSComponents do
 
           %{}
       end
-      |> Map.put(:desc_downcase, desc_downcase)
+      |> Map.put(:desc, desc)
       |> Map.merge(assigns)
 
     ~H"""
@@ -226,94 +218,79 @@ defmodule CAIWeb.ESSComponents do
         <%= link_character(@character, loadout_id: @event.loadout_id, team_id: @event.team_id, possessive?: true) %>
         <%= @vehicle_killer %> gunner killed <%= link_character(@other) %>
       <% :else -> %>
-        <%= @desc_downcase %>
+        <%= @desc %>
     <% end %>
     """
   end
 
   @ctf_flag_cap 2133
-  def build_event_log_item(assigns, %GainExperience{experience_id: @ctf_flag_cap, character_id: char_id} = ge, char_id) do
-    assigns = Map.put(assigns, :team_id, ge.team_id)
-
+  def build_event_log_item(assigns, %GainExperience{experience_id: @ctf_flag_cap}) do
     ~H"""
-    <%= link_character(@character, loadout_id: @event.loadout_id) %> captured a flag for the <%= CAI.factions()[@team_id].alias %>
+    <%= link_character(@character, loadout_id: @event.loadout_id) %> captured a flag for the
+    <%= CAI.factions()[@event.team_id].alias %>
     """
   end
 
   @point_cap_ids [272, 557]
-  def build_event_log_item(assigns, %GainExperience{experience_id: id, character_id: char_id}, char_id)
-      when id in @point_cap_ids do
-    assigns = Map.put(assigns, :action, (id == 272 && "captured") || "contributed to capturing")
-
+  def build_event_log_item(assigns, %GainExperience{experience_id: id}) when id in @point_cap_ids do
     ~H"""
-    <%= link_character(@character, loadout_id: @event.loadout_id) %> <%= @action %> a point
+    <%= link_character(@character, loadout_id: @event.loadout_id) %>
+    <%= if @event.experience_id == 272, do: "captured", else: "contributed to capturing" %> a point
     """
   end
 
   @heal 4
-  def build_event_log_item(assigns, %GainExperience{experience_id: @heal}, _c_id) do
+  def build_event_log_item(assigns, %GainExperience{experience_id: @heal}) do
     ~H"""
-    <% {healer, healed} =
-      if @character.character_id == @event.character_id, do: {@character, @other}, else: {@other, @character} %>
-    <%= link_character(healer, team_id: @event.team_id, loadout_id: @event.loadout_id) %> healed <%= link_character(healed) %>
+    <%= link_character(@character, team_id: @event.team_id, loadout_id: @event.loadout_id) %> healed
+    <%= link_character(@other) %>
     """
   end
 
   @priority_kill_assist 371
-  def build_event_log_item(assigns, %GainExperience{experience_id: @priority_kill_assist}, _c_id) do
+  def build_event_log_item(assigns, %GainExperience{experience_id: @priority_kill_assist}) do
     ~H"""
-    <% {char, char_loadout} =
-      if @character.character_id == @event.character_id, do: {@character, @event.loadout_id}, else: {@other, nil} %>
-    <%= link_character(char, loadout_id: char_loadout) %> assisted in killing a priority target,
-    <% {other, other_loadout} =
-      if @character.character_id == @event.character_id, do: {@other, nil}, else: {@character, @event.loadout_id} %>
-    <%= link_character(other, loadout_id: other_loadout) %>
+    <%= link_character(@character, loadout_id: @event.loadout_id) %> assisted in killing a priority target,
+    <%= link_character(@other) %>
     """
   end
 
-  @spawn_beacon_kill 270
-  def build_event_log_item(assigns, %GainExperience{experience_id: @spawn_beacon_kill}, _c_id) do
+  @spawn_point_kill [270, 1409]
+  def build_event_log_item(assigns, %GainExperience{experience_id: @spawn_point_kill}) do
     ~H"""
-    <%= link_character(@character, loadout_id: @event.loadout_id) %> destroyed an enemy spawn beacon
+    <%= link_character(@character, loadout_id: @event.loadout_id) %> destroyed an enemy
+    <%= if @event.experience_id == 270, do: "spawn beacon", else: "router" %>
     """
   end
 
   @end_kill_streak 38
-  def build_event_log_item(assigns, %GainExperience{experience_id: @end_kill_streak}, _c_id) do
+  def build_event_log_item(assigns, %GainExperience{experience_id: @end_kill_streak}) do
     ~H"""
-    <% {char, char_loadout} =
-      if @character.character_id == @event.character_id, do: {@character, @event.loadout_id}, else: {@other, nil} %>
-    <%= link_character(char, loadout_id: char_loadout) %> ended <% {other, other_loadout} =
-      if @character.character_id == @event.character_id, do: {@other, nil}, else: {@character, @event.loadout_id} %>
-    <%= link_character(other, loadout_id: other_loadout, possessive?: true) %> kill streak
+    <%= link_character(@character, loadout_id: @event.loadout_id) %> ended
+    <%= link_character(@other, possessive?: true) %> kill streak
     """
   end
 
   @domination 10
-  def build_event_log_item(assigns, %GainExperience{experience_id: @domination}, _c_id) do
+  def build_event_log_item(assigns, %GainExperience{experience_id: @domination}) do
     ~H"""
-    <% {char, char_loadout} =
-      if @character.character_id == @event.character_id, do: {@character, @event.loadout_id}, else: {@other, nil} %>
-    <%= link_character(char, loadout_id: char_loadout) %> is dominating
-    <% {other, other_loadout} =
-      if @character.character_id == @event.character_id, do: {@other, nil}, else: {@character, @event.loadout_id} %>
-    <%= link_character(other, loadout_id: other_loadout) %>
+    <%= link_character(@character, loadout_id: @event.loadout_id) %> is dominating <%= link_character(@other) %>
     """
   end
 
-  def build_event_log_item(assigns, %PlayerLogin{}, _c_id) do
+  def build_event_log_item(assigns, %PlayerLogin{}) do
     ~H"""
     <%= link_character(@character) %> logged in.
     """
   end
 
-  def build_event_log_item(assigns, %PlayerLogout{}, _c_id) do
+  def build_event_log_item(assigns, %PlayerLogout{}) do
     ~H"""
     <%= link_character(@character) %> logged out.
     """
   end
 
-  def build_event_log_item(_, _, _), do: ""
+  def build_event_log_item(_, _), do: ""
 
   defp render_bonus(assigns, %GainExperience{} = ge) do
     assigns = Map.put(assigns, :ge, ge)
@@ -334,7 +311,7 @@ defmodule CAIWeb.ESSComponents do
 
     ~H"""
     <%= if Map.get(@entry.event, :outfit_id) == @fc.outfit_id do %>
-      <span>for their outfit, <%= Outfit.alias_or_name(@character.outfit) %></span>
+      <span :if={@character.outfit}>for their outfit, <%= Outfit.alias_or_name(@character.outfit) %></span>
     <% else %>
       <span :for={{:ok, outfit} <- [CAI.Characters.fetch_outfit(@fc.outfit_id)]}>
         <% control_type = if @fc.new_faction_id == @fc.old_faction_id, do: :def, else: :cap %>
@@ -381,7 +358,7 @@ defmodule CAIWeb.ESSComponents do
       name: name,
       id: id,
       possessive: (Keyword.get(opts, :possessive?, false) && "'s") || "",
-      faction_classes: faction_css_classes(faction_id, Keyword.get(opts, :team_id)),
+      faction_classes: Utils.faction_css_classes(faction_id, Keyword.get(opts, :team_id)),
       loadout_icon: loadout_icon(Keyword.get(opts, :loadout_id)),
       vehicle_icon: vehicle_icon(Keyword.get(opts, :vehicle_id), name)
     }
@@ -393,20 +370,6 @@ defmodule CAIWeb.ESSComponents do
       <%= @name <> @possessive %>
     </.link>
     """
-  end
-
-  # Can't actually store these classes in `CAI.factions` because these classes won't be compiled...
-  defp faction_css_classes(faction_id, team_id) do
-    case {CAI.factions()[faction_id].alias, team_id} do
-      {"NS" <> _, 1} -> "bg-gradient-to-r from-gray-600 to-purple-600 hover:bg-gray-800"
-      {"NS" <> _, 2} -> "bg-gradient-to-r from-gray-600 to-blue-600 hover:bg-gray-800"
-      {"NS" <> _, 3} -> "bg-gradient-to-r from-gray-600 to-red-500 hover:bg-gray-800"
-      {"NS" <> _, _} -> "bg-gray-600 hover:bg-gray-800"
-      {"NC", _} -> "bg-blue-600 hover:bg-blue-800"
-      {"VS", _} -> "bg-purple-600 hover:bg-purple-800"
-      {"TR", _} -> "bg-red-500 hover:bg-red-800"
-      _ -> "bg-gray-600 hover:bg-gray-800"
-    end
   end
 
   defp loadout_icon(loadout_id) do

@@ -17,7 +17,7 @@ defmodule CAIWeb.SessionLive.Entry do
   import CAI.Guards, only: [is_kill_xp: 1]
 
   alias CAI.Characters
-  alias CAI.ESS.{Death, FacilityControl, GainExperience, PlayerFacilityCapture, PlayerFacilityDefend}
+  alias CAI.ESS.{Death, FacilityControl, GainExperience, PlayerFacilityCapture, PlayerFacilityDefend, VehicleDestroy}
 
   alias CAI.Characters.Character
   alias CAI.ESS.Helpers
@@ -41,17 +41,17 @@ defmodule CAIWeb.SessionLive.Entry do
   Given a map of groups, like %{pending_key => %{event: primary_event, bonuses: event_list}}, where pending_key looks
   like {timestamp, character_id, other_id} or {timestamp, world_id, zone_id, facility_id}, create a list of entries.
   """
-  def from_groups(grouped, init_entries, character, other_char_map) do
+  def from_groups(grouped, init_entries, character_map) do
     for {_, %{event: e, bonuses: bonuses}} <- grouped, reduce: init_entries do
       acc ->
         # If we didn't find a primary event associated with these bonuses, just put the bonuses back as regular entries.
         if is_nil(e) do
-          other =
-            Helpers.get_other_character(character.character_id, List.first(bonuses), &Map.fetch(other_char_map, &1))
+          {character, other} = map_ids_to_characters(List.first(bonuses), character_map)
 
           Enum.map(bonuses, &new(&1, character, other)) ++ acc
         else
-          other = Helpers.get_other_character(character.character_id, e, &Map.fetch(other_char_map, &1))
+          {character, other} = map_ids_to_characters(e, character_map)
+
           [new(e, character, other, 1, bonuses) | acc]
         end
     end
@@ -60,73 +60,96 @@ defmodule CAIWeb.SessionLive.Entry do
   @doc """
   Map ESS events to entries.
 
-  Fetches all other Characters involved in the given events in (at most) one Census query.
+  Fetches all other Characters involved in the given events in (at most) one Census query. Can optionally take in a list
+  of Character structs that don't need to be fetched, which would be merged with the fetched Characters
   """
-  @spec map([map()], session_character :: Character.t()) :: [Entry.t()]
-  def map(events, character) do
+  @spec map([map()], [Character.t()]) :: [Entry.t()]
+  def map(events, already_fetched \\ []) do
+    already_fetched_map = Map.new(already_fetched, &{&1.character_id, &1})
+
     other_character_ids =
       Stream.flat_map(
         events,
         &(Map.take(&1, [:character_id, :attacker_character_id, :other_id]) |> Map.values())
       )
       |> MapSet.new()
-      |> MapSet.delete(nil)
-      |> MapSet.delete(0)
-      |> MapSet.delete(character.character_id)
+      |> MapSet.difference(MapSet.new([nil, 0 | Map.keys(already_fetched_map)]))
 
-    other_character_map = other_character_ids |> Characters.get_many() |> Map.put(character.character_id, character)
+    character_map = other_character_ids |> Characters.get_many() |> Map.merge(already_fetched_map)
 
     events
-    |> map(character, other_character_map)
+    |> do_map(character_map)
     |> Enum.reverse()
   end
 
   # entry point
-  defp map([e | init_events], character, other_char_map) do
-    other = Helpers.get_other_character(character.character_id, e, &Map.fetch(other_char_map, &1))
+  defp do_map([e | init_events], character_map) do
+    {character, other} = map_ids_to_characters(e, character_map)
 
-    map([new(e, character, other)], init_events, character, other_char_map)
+    do_map([new(e, character, other)], init_events, character_map)
   end
 
   # exit condition (no remaining events)
-  defp map(mapped, [], _character, _other_char_map), do: mapped
+  defp do_map(mapped, [], _character_map), do: mapped
 
   # when the prev_e and e timestamps match, let's check for a primary event + the corresponding bonus events, and
   # then condense them
-  defp map(
+  defp do_map(
          [%Entry{event: %{timestamp: t} = prev_e} | mapped],
          [%{timestamp: t} = e | rem_events],
-         character,
-         other_char_map
+         character_map
        ) do
     {new_mapped, remaining} =
-      condense_event_with_bonuses([prev_e, e | rem_events], mapped, %{}, _target_t = t, character, other_char_map)
+      condense_event_with_bonuses([prev_e, e | rem_events], mapped, %{}, _target_t = t, character_map)
 
-    map(new_mapped, remaining, character, other_char_map)
+    do_map(new_mapped, remaining, character_map)
   end
 
-  defp map(
+  defp do_map(
          [%Entry{} = prev_entry1, %Entry{count: prev_count} = prev_entry2 | mapped],
          [e | rem_events],
-         character,
-         other_char_map
+         character_map
        ) do
     if Helpers.consecutive?(prev_entry1.event, prev_entry2.event, prev_entry1.bonuses, prev_entry2.bonuses) do
-      map([%Entry{prev_entry2 | count: prev_count + 1} | mapped], [e | rem_events], character, other_char_map)
+      do_map([%Entry{prev_entry2 | count: prev_count + 1} | mapped], [e | rem_events], character_map)
     else
-      other = Helpers.get_other_character(character.character_id, e, &Map.fetch(other_char_map, &1))
-      map([new(e, character, other), prev_entry1, prev_entry2 | mapped], rem_events, character, other_char_map)
+      {character, other} = map_ids_to_characters(e, character_map)
+      do_map([new(e, character, other), prev_entry1, prev_entry2 | mapped], rem_events, character_map)
     end
   end
 
-  defp map(mapped, [e | rem_events], character, other_char_map) do
-    other = Helpers.get_other_character(character.character_id, e, &Map.fetch(other_char_map, &1))
-    map([new(e, character, other) | mapped], rem_events, character, other_char_map)
+  defp do_map(mapped, [e | rem_events], character_map) do
+    {character, other} = map_ids_to_characters(e, character_map)
+    do_map([new(e, character, other) | mapped], rem_events, character_map)
+  end
+
+  defp map_ids_to_characters(%GainExperience{character_id: character_id, other_id: other_id}, character_map) do
+    {get_character(character_map, character_id), get_character(character_map, other_id)}
+  end
+
+  defp map_ids_to_characters(%mod{character_id: character_id, attacker_character_id: attacker_id}, character_map)
+       when mod in [Death, VehicleDestroy] do
+    {get_character(character_map, character_id), get_character(character_map, attacker_id)}
+  end
+
+  defp map_ids_to_characters(%{character_id: character_id}, character_map) do
+    {get_character(character_map, character_id), :none}
+  end
+
+  defp get_character(character_map, character_id) do
+    case Map.get(character_map, character_id) do
+      %Character{} = c -> c
+      res when res in [nil, :not_found, :error] -> {:unavailable, character_id}
+    end
+  end
+
+  defp map_ids_to_characters(_event, _character_map) do
+    {:none, :none}
   end
 
   # No more events to iterate
-  defp condense_event_with_bonuses([], mapped, grouped, _target_t, character, other_char_map) do
-    apply_grouped([], mapped, grouped, character, other_char_map)
+  defp condense_event_with_bonuses([], mapped, grouped, _target_t, character_map) do
+    apply_grouped([], mapped, grouped, character_map)
   end
 
   # If timestamps are different, we're done here
@@ -135,17 +158,16 @@ defmodule CAIWeb.SessionLive.Entry do
          mapped,
          grouped,
          target_t,
-         character,
-         other_char_map
+         character_map
        )
        when t != target_t do
-    apply_grouped(rem_events, mapped, grouped, character, other_char_map)
+    apply_grouped(rem_events, mapped, grouped, character_map)
   end
 
   # If `event` is a primary event, or bonus event related to the primary, add it to `grouped` keyed by
   # {timestamp, attacker_id, victim_id} or {timestamp, world_id, zone_id, facility_id}. Otherwise, append `event` to
   # mapped
-  defp condense_event_with_bonuses([event | rem_events], mapped, grouped, target_t, character, other_char_map) do
+  defp condense_event_with_bonuses([event | rem_events], mapped, grouped, target_t, character_map) do
     case event do
       # put a death event as the primary event for a grouped entry
       %Death{} ->
@@ -157,7 +179,7 @@ defmodule CAIWeb.SessionLive.Entry do
             &Map.put(&1, :event, event)
           )
 
-        condense_event_with_bonuses(rem_events, mapped, new_grouped, target_t, character, other_char_map)
+        condense_event_with_bonuses(rem_events, mapped, new_grouped, target_t, character_map)
 
       # put a GE kill XP bonus event for a grouped entry
       %GainExperience{experience_id: id} when is_kill_xp(id) ->
@@ -169,7 +191,7 @@ defmodule CAIWeb.SessionLive.Entry do
             &Map.update!(&1, :bonuses, fn bonuses -> [event | bonuses] end)
           )
 
-        condense_event_with_bonuses(rem_events, mapped, new_grouped, target_t, character, other_char_map)
+        condense_event_with_bonuses(rem_events, mapped, new_grouped, target_t, character_map)
 
       # put a player facility cap/def event as the primary event for a grouped entry
       %mod{} when mod in [PlayerFacilityCapture, PlayerFacilityDefend] ->
@@ -181,7 +203,7 @@ defmodule CAIWeb.SessionLive.Entry do
             &Map.put(&1, :event, event)
           )
 
-        condense_event_with_bonuses(rem_events, mapped, new_grouped, target_t, character, other_char_map)
+        condense_event_with_bonuses(rem_events, mapped, new_grouped, target_t, character_map)
 
       # put a facility control for a grouped entry
       %FacilityControl{} ->
@@ -193,19 +215,19 @@ defmodule CAIWeb.SessionLive.Entry do
             &Map.update!(&1, :bonuses, fn bonuses -> [event | bonuses] end)
           )
 
-        condense_event_with_bonuses(rem_events, mapped, new_grouped, target_t, character, other_char_map)
+        condense_event_with_bonuses(rem_events, mapped, new_grouped, target_t, character_map)
 
       # this event seems to be unrelated, so just append it to `mapped`
       _ ->
-        other = Helpers.get_other_character(character.character_id, event, &Map.fetch(other_char_map, &1))
+        {character, other} = map_ids_to_characters(event, character_map)
         new_mapped = [new(event, character, other) | mapped]
 
-        condense_event_with_bonuses(rem_events, new_mapped, grouped, target_t, character, other_char_map)
+        condense_event_with_bonuses(rem_events, new_mapped, grouped, target_t, character_map)
     end
   end
 
-  defp apply_grouped(remaining, mapped, grouped, character, other_char_map) do
-    new_mapped = from_groups(grouped, mapped, character, other_char_map)
+  defp apply_grouped(remaining, mapped, grouped, character_map) do
+    new_mapped = from_groups(grouped, mapped, character_map)
 
     {new_mapped, remaining}
   end
