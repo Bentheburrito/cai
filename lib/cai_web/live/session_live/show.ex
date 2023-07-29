@@ -20,6 +20,7 @@ defmodule CAIWeb.SessionLive.Show do
   @prepend 0
   @append -1
   @events_limit 15
+  @time_update_interval 3000
 
   ### MOUNT AND HANDLE_PARAMS ###
 
@@ -100,8 +101,10 @@ defmodule CAIWeb.SessionLive.Show do
       end
 
       # If the character is currently online, let's build the session so far
+      online? = Helpers.online?(character.character_id, timestamps)
+
       aggregates =
-        with true <- Helpers.online?(character.character_id, timestamps),
+        with true <- online?,
              [{login, logout} | _] <- timestamps,
              {:ok, session} <- Session.build(character.character_id, login, logout),
              {:ok, event_history} <- get_session_history(character.character_id, login, logout, socket) do
@@ -122,7 +125,7 @@ defmodule CAIWeb.SessionLive.Show do
             Logger.error("""
             Tried to match `[{login, logout} | _]` from `timestamps = #{inspect(timestamps)}`, but got an empty list.
             #{character.name_first} (#{character.character_id}) was confirmed online, so there should have been at least one boundary pair:
-            #{Helpers.online?(character.character_id, timestamps)} = Helpers.online?(#{character.character_id}, #{inspect(timestamps)})
+            #{online?} = Helpers.online?(#{character.character_id}, #{inspect(timestamps)})
             """)
 
             Map.new(Session.aggregate_fields(), &{&1, 0})
@@ -132,10 +135,12 @@ defmodule CAIWeb.SessionLive.Show do
         end
 
       timestamps =
-        case timestamps do
-          [{login, logout}] -> {login, logout}
-          _ -> {:os.system_time(:second), :os.system_time(:second) + 1}
+        case {online?, timestamps} do
+          {true, [{login, logout}]} -> {login, logout}
+          _ -> {:os.system_time(:second), :offline}
         end
+
+      Process.send_after(self(), :time_update, @time_update_interval)
 
       {
         :noreply,
@@ -207,6 +212,7 @@ defmodule CAIWeb.SessionLive.Show do
     handle_ess_event(event, socket)
   end
 
+  # Live Session - we've waited long enough to receive a primary event and any bonuses, so combine them into an Entry.
   @impl true
   def handle_info({:build_entries, pending_key}, socket) do
     case Map.fetch(socket.assigns.pending_groups, pending_key) do
@@ -239,6 +245,26 @@ defmodule CAIWeb.SessionLive.Show do
     end
   end
 
+  # Live Session - Update the `logout` time every few seconds, unless the character is no longer online.
+  @impl true
+  def handle_info(:time_update, socket) do
+    last_entry =
+      Map.get_lazy(socket.assigns, :last_entry, fn ->
+        case socket.assigns.timestamps do
+          {_login, :offline} -> Entry.new(%MetagameEvent{timestamp: 0}, %{})
+          {_login, logout} -> Entry.new(%MetagameEvent{timestamp: logout}, %{})
+        end
+      end)
+
+    if Helpers.online?(last_entry.event) do
+      {login, _logout} = Map.fetch!(socket.assigns, :timestamps)
+      Process.send_after(self(), :time_update, @time_update_interval)
+      {:noreply, assign(socket, :timestamps, {login, :os.system_time(:second)})}
+    else
+      {:noreply, socket}
+    end
+  end
+
   ### HELPERS ###
 
   # Death or PlayerFacilityCapture/Defend primary event
@@ -262,10 +288,10 @@ defmodule CAIWeb.SessionLive.Show do
   def handle_ess_event(event, socket) do
     character = socket.assigns.character
     other = Helpers.get_other_character(character.character_id, event)
-    prev_entry = Map.get(socket.assigns, :last_entry, Entry.new(%MetagameEvent{}, %{}))
+    last_entry = Map.get(socket.assigns, :last_entry, Entry.new(%MetagameEvent{}, %{}))
 
-    if Helpers.consecutive?(event, prev_entry.event) do
-      updated_entry = %Entry{prev_entry | count: prev_entry.count + 1}
+    if Helpers.consecutive?(event, last_entry.event) do
+      updated_entry = %Entry{last_entry | count: last_entry.count + 1}
 
       {
         :noreply,
