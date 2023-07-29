@@ -30,11 +30,10 @@
         <td class="p-1 pl-2 border-r">Kills</td>
         <td class="p-1 pl-2"><%= @aggregates.kill_count %></td>
         <td class="p-1 pl-2"><%= @aggregates.kill_ivi_count %></td>
-        
       </tr>
       <tr>
-              <td class="p-1 pl-2 border-r">Headshots</td>
-      <td class="p-1 pl-2"><%= @aggregates.kill_hs_count %></td>
+        <td class="p-1 pl-2 border-r">Headshots</td>
+        <td class="p-1 pl-2"><%= @aggregates.kill_hs_count %></td>
         <td class="p-1 pl-2"><%= @aggregates.kill_hs_ivi_count %></td>
       </tr>
       <tr>
@@ -110,12 +109,18 @@
           <%= Float.round(safe_divide(@aggregates.nanites_destroyed, @aggregates.nanites_lost), 2) %>
         </td>
       </tr>
-       <tr>
+      <tr>
         <td class="p-1 pl-2 border-r" title="Vehicle Kills/Minute">KPM</td>
-        <td class="p-1 pl-2" title={"# total vehicle kills / minutes played => #{@aggregates.vehicle_kill_count} / #{duration_mins}"}>
+        <td
+          class="p-1 pl-2"
+          title={"# total vehicle kills / minutes played => #{@aggregates.vehicle_kill_count} / #{duration_mins}"}
+        >
           <%= Float.round(safe_divide(@aggregates.vehicle_kill_count, duration_mins), 2) %>
         </td>
-        <td class="p-1 pl-2" title={"# nanites destroyed / minutes played => #{@aggregates.nanites_destroyed} / #{duration_mins}"}>
+        <td
+          class="p-1 pl-2"
+          title={"# nanites destroyed / minutes played => #{@aggregates.nanites_destroyed} / #{duration_mins}"}
+        >
           <%= Float.round(safe_divide(@aggregates.nanites_destroyed, duration_mins), 2) %>
         </td>
       </tr>
