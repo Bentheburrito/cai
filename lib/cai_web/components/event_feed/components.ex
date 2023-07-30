@@ -1,4 +1,4 @@
-defmodule CAIWeb.ESSComponents do
+defmodule CAIWeb.EventFeed.Components do
   @moduledoc """
   Functions for rendering ESS data, like Event Feed entries.
   """
@@ -9,10 +9,10 @@ defmodule CAIWeb.ESSComponents do
     endpoint: CAIWeb.Endpoint,
     router: CAIWeb.Router
 
-  import CAI.Guards, only: [is_character_id: 1, is_revive_xp: 1, is_assist_xp: 1, is_gunner_assist_xp: 1]
+  import CAI.Guards, only: [is_revive_xp: 1, is_assist_xp: 1, is_gunner_assist_xp: 1]
   import CAIWeb.CoreComponents, only: [hover_timestamp: 1]
+  import CAIWeb.EventFeed.Utils
 
-  alias CAI.Characters.Character
   alias CAI.Characters.Outfit
 
   alias CAI.ESS.{
@@ -27,21 +27,19 @@ defmodule CAIWeb.ESSComponents do
     VehicleDestroy
   }
 
-  alias CAIWeb.Utils
-
   require Logger
 
   attr(:entry, :map)
   attr(:id, :string)
 
-  def event_item(assigns) do
+  def entry(assigns) do
     ~H"""
     <% assigns =
       assigns
       |> Map.put(:character, @entry.character)
       |> Map.put(:other, @entry.other)
       |> Map.put(:event, @entry.event) %>
-    <%= unless (log = build_event_log_item(assigns, @entry.event)) == "" do %>
+    <%= unless (log = entry_content(assigns, @entry.event)) == "" do %>
       <div
         id={@id}
         phx-mounted={
@@ -62,14 +60,15 @@ defmodule CAIWeb.ESSComponents do
     """
   end
 
-  def build_event_log_item(assigns, %BattleRankUp{}) do
+  # Given an event and associated Character structs (where applicable), render a message
+  defp entry_content(assigns, %BattleRankUp{}) do
     ~H"""
     <%= link_character(@character) %> ranked up to Battle Rank <%= @event.battle_rank %>
     """
   end
 
   # Suicide
-  def build_event_log_item(assigns, %Death{character_id: char_id, attacker_character_id: char_id}) do
+  defp entry_content(assigns, %Death{character_id: char_id, attacker_character_id: char_id}) do
     ~H"""
     <%= link_character(@character,
       loadout_id: @event.character_loadout_id,
@@ -79,7 +78,7 @@ defmodule CAIWeb.ESSComponents do
     """
   end
 
-  def build_event_log_item(assigns, %Death{}) do
+  defp entry_content(assigns, %Death{}) do
     ~H"""
     <% opts = [
       loadout_id: @event.attacker_loadout_id,
@@ -92,7 +91,7 @@ defmodule CAIWeb.ESSComponents do
     """
   end
 
-  def build_event_log_item(assigns, %PlayerFacilityCapture{facility_id: facility_id}) do
+  defp entry_content(assigns, %PlayerFacilityCapture{facility_id: facility_id}) do
     facility = CAI.get_facility(facility_id)
 
     facility_type_text =
@@ -116,7 +115,7 @@ defmodule CAIWeb.ESSComponents do
     """
   end
 
-  def build_event_log_item(assigns, %PlayerFacilityDefend{facility_id: facility_id}) do
+  defp entry_content(assigns, %PlayerFacilityDefend{facility_id: facility_id}) do
     facility = CAI.get_facility(facility_id)
 
     facility_type_text =
@@ -141,7 +140,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Destroyed own vehicle
-  def build_event_log_item(assigns, %VehicleDestroy{character_id: character_id, attacker_character_id: character_id}) do
+  defp entry_content(assigns, %VehicleDestroy{character_id: character_id, attacker_character_id: character_id}) do
     ~H"""
     <%= link_character(@character, loadout_id: @event.attacker_loadout_id, team_id: @event.team_id) %> destroyed their <%= CAI.get_vehicle(
       @event.vehicle_id
@@ -149,7 +148,7 @@ defmodule CAIWeb.ESSComponents do
     """
   end
 
-  def build_event_log_item(assigns, %VehicleDestroy{}) do
+  defp entry_content(assigns, %VehicleDestroy{}) do
     ~H"""
     <% opts = [
       loadout_id: @event.attacker_loadout_id,
@@ -164,7 +163,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Kill assist
-  def build_event_log_item(assigns, %GainExperience{experience_id: id}) when is_assist_xp(id) do
+  defp entry_content(assigns, %GainExperience{experience_id: id}) when is_assist_xp(id) do
     ~H"""
     <%= link_character(@character, loadout_id: @event.loadout_id, team_id: @event.team_id) %> assisted in killing
     <%= link_character(@other) %>
@@ -172,14 +171,14 @@ defmodule CAIWeb.ESSComponents do
   end
 
   # Revived (or got revived by) someone
-  def build_event_log_item(assigns, %GainExperience{experience_id: id}) when is_revive_xp(id) do
+  defp entry_content(assigns, %GainExperience{experience_id: id}) when is_revive_xp(id) do
     ~H"""
     <%= link_character(@character, loadout_id: @event.loadout_id) %> revived <%= link_character(@other) %>
     """
   end
 
   # Gunner gets a kill
-  def build_event_log_item(assigns, %GainExperience{experience_id: id}) when is_gunner_assist_xp(id) do
+  defp entry_content(assigns, %GainExperience{experience_id: id}) when is_gunner_assist_xp(id) do
     %{"description" => desc} = CAI.get_xp(id)
 
     clean_vehicle_gunner = fn raw ->
@@ -224,7 +223,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   @ctf_flag_cap 2133
-  def build_event_log_item(assigns, %GainExperience{experience_id: @ctf_flag_cap}) do
+  defp entry_content(assigns, %GainExperience{experience_id: @ctf_flag_cap}) do
     ~H"""
     <%= link_character(@character, loadout_id: @event.loadout_id) %> captured a flag for the
     <%= CAI.factions()[@event.team_id].alias %>
@@ -232,7 +231,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   @point_cap_ids [272, 557]
-  def build_event_log_item(assigns, %GainExperience{experience_id: id}) when id in @point_cap_ids do
+  defp entry_content(assigns, %GainExperience{experience_id: id}) when id in @point_cap_ids do
     ~H"""
     <%= link_character(@character, loadout_id: @event.loadout_id) %>
     <%= if @event.experience_id == 272, do: "captured", else: "contributed to capturing" %> a point
@@ -240,7 +239,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   @heal 4
-  def build_event_log_item(assigns, %GainExperience{experience_id: @heal}) do
+  defp entry_content(assigns, %GainExperience{experience_id: @heal}) do
     ~H"""
     <%= link_character(@character, team_id: @event.team_id, loadout_id: @event.loadout_id) %> healed
     <%= link_character(@other) %>
@@ -248,7 +247,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   @priority_kill_assist 371
-  def build_event_log_item(assigns, %GainExperience{experience_id: @priority_kill_assist}) do
+  defp entry_content(assigns, %GainExperience{experience_id: @priority_kill_assist}) do
     ~H"""
     <%= link_character(@character, loadout_id: @event.loadout_id) %> assisted in killing a priority target,
     <%= link_character(@other) %>
@@ -256,7 +255,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   @spawn_point_kill [270, 1409]
-  def build_event_log_item(assigns, %GainExperience{experience_id: @spawn_point_kill}) do
+  defp entry_content(assigns, %GainExperience{experience_id: @spawn_point_kill}) do
     ~H"""
     <%= link_character(@character, loadout_id: @event.loadout_id) %> destroyed an enemy
     <%= if @event.experience_id == 270, do: "spawn beacon", else: "router" %>
@@ -264,7 +263,7 @@ defmodule CAIWeb.ESSComponents do
   end
 
   @end_kill_streak 38
-  def build_event_log_item(assigns, %GainExperience{experience_id: @end_kill_streak}) do
+  defp entry_content(assigns, %GainExperience{experience_id: @end_kill_streak}) do
     ~H"""
     <%= link_character(@character, loadout_id: @event.loadout_id) %> ended
     <%= link_character(@other, possessive?: true) %> kill streak
@@ -272,25 +271,17 @@ defmodule CAIWeb.ESSComponents do
   end
 
   @domination 10
-  def build_event_log_item(assigns, %GainExperience{experience_id: @domination}) do
+  defp entry_content(assigns, %GainExperience{experience_id: @domination}) do
     ~H"""
     <%= link_character(@character, loadout_id: @event.loadout_id) %> is dominating <%= link_character(@other) %>
     """
   end
 
-  def build_event_log_item(assigns, %PlayerLogin{}) do
-    ~H"""
-    <%= link_character(@character) %> logged in.
-    """
-  end
+  defp entry_content(assigns, %PlayerLogin{}), do: ~H"<%= link_character(@character) %> logged in."
 
-  def build_event_log_item(assigns, %PlayerLogout{}) do
-    ~H"""
-    <%= link_character(@character) %> logged out.
-    """
-  end
+  defp entry_content(assigns, %PlayerLogout{}), do: ~H"<%= link_character(@character) %> logged out."
 
-  def build_event_log_item(_, _), do: ""
+  defp entry_content(_, _), do: ""
 
   defp render_bonus(assigns, %GainExperience{} = ge) do
     assigns = Map.put(assigns, :ge, ge)
@@ -319,108 +310,5 @@ defmodule CAIWeb.ESSComponents do
       </span>
     <% end %>
     """
-  end
-
-  defp link_character(maybe_character, opts \\ [])
-
-  defp link_character({:unavailable, character_id}, opts) when is_character_id(character_id) do
-    possessive? = Keyword.get(opts, :possessive?, false)
-
-    assigns = %{
-      character_id: character_id,
-      possessive: (possessive? && "'s") || "",
-      loadout_icon: loadout_icon(Keyword.get(opts, :loadout_id)),
-      vehicle_icon: vehicle_icon(Keyword.get(opts, :vehicle_id), "this character")
-    }
-
-    ~H"""
-    <.link navigate={~p"/sessions/#{@character_id}"} class="rounded pl-1 pr-1 mr-1 bg-gray-800 hover:text-gray-400">
-      <%= @vehicle_icon %>
-      <%= @loadout_icon %> [Name Unavailable]<%= @possessive %>
-    </.link>
-    """
-  end
-
-  defp link_character({:unavailable, npc_id}, _opts) do
-    if npc_id == 0 do
-      ""
-    else
-      assigns = %{npc_id: npc_id}
-
-      ~H"""
-      <span title={"NPC ID #{@npc_id}"}>a vehicle</span>
-      """
-    end
-  end
-
-  defp link_character(%Character{name_first: name, character_id: id, faction_id: faction_id}, opts) do
-    assigns = %{
-      name: name,
-      id: id,
-      possessive: (Keyword.get(opts, :possessive?, false) && "'s") || "",
-      faction_classes: Utils.faction_css_classes(faction_id, Keyword.get(opts, :team_id)),
-      loadout_icon: loadout_icon(Keyword.get(opts, :loadout_id)),
-      vehicle_icon: vehicle_icon(Keyword.get(opts, :vehicle_id), name)
-    }
-
-    ~H"""
-    <.link navigate={~p"/sessions/#{@id}"} class={"rounded pl-1 pr-1 mr-1 #{@faction_classes}"}>
-      <%= @vehicle_icon %>
-      <%= @loadout_icon %>
-      <%= @name <> @possessive %>
-    </.link>
-    """
-  end
-
-  defp loadout_icon(loadout_id) do
-    class_name = CAI.loadouts()[loadout_id][:class_name]
-
-    icon_url =
-      case class_name do
-        # 14985
-        "Infiltrator" -> PS2.API.get_image_url("/files/ps2/images/static/204.png")
-        # 14986
-        "Light Assault" -> PS2.API.get_image_url("/files/ps2/images/static/62.png")
-        # 14988
-        "Medic" -> PS2.API.get_image_url("/files/ps2/images/static/65.png")
-        # 14983
-        "Engineer" -> PS2.API.get_image_url("/files/ps2/images/static/201.png")
-        # 14984
-        "Heavy Assault" -> PS2.API.get_image_url("/files/ps2/images/static/59.png")
-        # 14987
-        "MAX" -> PS2.API.get_image_url("/files/ps2/images/static/207.png")
-        _ -> nil
-      end
-
-    assigns = %{icon_url: icon_url, class_name: class_name}
-
-    ~H"""
-    <img :if={@icon_url} src={@icon_url} alt={@class_name} title={@class_name} class="inline object-contain h-4" />
-    """
-  end
-
-  defp vehicle_icon(vehicle_id, character_name) do
-    vehicle = CAI.get_vehicle(vehicle_id)
-
-    assigns = %{
-      icon_url: vehicle["logo_path"],
-      title_text: "#{character_name} was in a #{vehicle["name"]} during this event"
-    }
-
-    ~H"""
-    <img :if={@icon_url} src={@icon_url} alt={@title_text} title={@title_text} class="inline object-contain h-4" />
-    """
-  end
-
-  defp get_weapon_name(0, 0) do
-    "a fall from a high place"
-  end
-
-  defp get_weapon_name(0, _) do
-    "a blunt force"
-  end
-
-  defp get_weapon_name(weapon_id, _) do
-    "#{CAI.get_weapon(weapon_id)["name"]}"
   end
 end
