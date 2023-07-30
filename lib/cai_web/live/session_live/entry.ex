@@ -136,15 +136,15 @@ defmodule CAIWeb.SessionLive.Entry do
     {get_character(character_map, character_id), :none}
   end
 
+  defp map_ids_to_characters(_event, _character_map) do
+    {:none, :none}
+  end
+
   defp get_character(character_map, character_id) do
     case Map.get(character_map, character_id) do
       %Character{} = c -> c
       res when res in [nil, :not_found, :error] -> {:unavailable, character_id}
     end
-  end
-
-  defp map_ids_to_characters(_event, _character_map) do
-    {:none, :none}
   end
 
   # No more events to iterate
