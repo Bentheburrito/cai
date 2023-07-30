@@ -636,13 +636,21 @@ defmodule CAIWeb.CoreComponents do
 
   def character_header(assigns) do
     ~H"""
+    <% pretige_icon = if @character.prestige_level == 1, do: 88685, else: 94469 %>
+
     <.header>
       <img class="h-20 w-20" src={CAI.factions()[@character.faction_id].image} />
 
       <div class="whitespace-nowrap w-[fit-content]">
         <span :if={@character.outfit}>[<%= @character.outfit.alias %>]</span>
         <%= @character.name_first %> |
-        Battle Rank <%= @character.battle_rank %>
+        <img
+          :if={@character.prestige_level > 0}
+          src={PS2.API.get_image_url("/files/ps2/images/static/#{pretige_icon}.png")}
+          alt={"ASP Level #{@character.prestige_level}"}
+          title={"ASP Level #{@character.prestige_level}"}
+          class="inline object-contain h-6"
+        /> BR <%= @character.battle_rank %>
 
         <div class="h-1 bg-neutral-200 dark:bg-neutral-600" title="Progress to next Battle Rank">
           <div

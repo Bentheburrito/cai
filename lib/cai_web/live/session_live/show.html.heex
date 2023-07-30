@@ -136,39 +136,13 @@
   </div>
 </div>
 
-<div :if={assigns[:streams][:events]}>
-  <h3 class="m-2">
-    <span :if={@live?}><span class="animate-slow-blink">🔴</span> Live</span> Event Feed
-  </h3>
-  <div class="border-solid border-4 m-1 p-2 rounded-2xl border-gray-400">
-    <span id="live-event-feed" phx-update="stream">
-      <.entry :for={{dom_id, entry} <- @streams.events} entry={entry} id={dom_id} />
-    </span>
-    <%!-- pattern matching against empty list, since `length/1` is O(n) --%>
-    <span
-      :if={is_list(assigns[:remaining_events]) and not match?([], assigns[:remaining_events])}
-      class="flex justify-center"
-    >
-      <%= if @loading_more? do %>
-        <.button
-          id="load-more-button"
-          phx-click="load-more-events"
-          class="absolute mx-auto border-solid border-2 border-gray-400 hover:bg-zinc-900 text-gray-400 active:text-gray-400"
-          disabled
-        >
-          Loading...
-        </.button>
-      <% else %>
-        <.button
-          id="load-more-button"
-          phx-click="load-more-events"
-          class="absolute mx-auto border-solid border-2 border-gray-400"
-        >
-          Load More
-        </.button>
-      <% end %>
-    </span>
-  </div>
+<.event_feed
+  :if={assigns[:streams][:events]}
+  entry_stream={@streams.events}
+  loading_more?={@loading_more?}
+  more_events?={is_list(assigns[:remaining_events]) and not match?([], assigns[:remaining_events])}
+>
+  <span :if={@live?}><span class="animate-slow-blink">🔴</span> Live</span> Event Feed
+</.event_feed>
 
-  <.back navigate={~p"/sessions/#{@character.character_id}"}>Back to sessions</.back>
-</div>
+<.back navigate={~p"/sessions/#{@character.character_id}"}>Back to sessions</.back>
