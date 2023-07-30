@@ -1,7 +1,7 @@
 defmodule CAIWeb.SessionLive.Show do
   use CAIWeb, :live_view
 
-  import CAIWeb.ESSComponents
+  import CAIWeb.EventFeed.Components
   import CAIWeb.Utils
   import CAIWeb.SessionLive.Helpers
 
