@@ -650,9 +650,12 @@ defmodule CAIWeb.CoreComponents do
           alt={"ASP Level #{@character.prestige_level}"}
           title={"ASP Level #{@character.prestige_level}"}
           class="inline object-contain h-6"
-        /> BR <%= @character.battle_rank %>
+        /> <span title={"Battle Rank #{@character.battle_rank}"}>BR <%= @character.battle_rank %></span>
 
-        <div class="h-1 bg-neutral-200 dark:bg-neutral-600" title="Progress to next Battle Rank">
+        <div
+          class="h-1 bg-neutral-200 dark:bg-neutral-600"
+          title={"#{@character.percent_to_next_br}% to BR #{@character.battle_rank + 1}"}
+        >
           <div
             class={"h-1 #{Utils.faction_css_classes(@character.faction_id, nil)} brightness-150"}
             style={"width: #{round(@character.percent_to_next_br)}%"}

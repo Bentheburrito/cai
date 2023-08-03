@@ -143,6 +143,7 @@ defmodule CAIWeb.SessionLive.Entry do
   defp get_character(character_map, character_id) do
     case Map.get(character_map, character_id) do
       %Character{} = c -> c
+      {:unavailable, other_id} -> {:unavailable, other_id}
       res when res in [nil, :not_found, :error] -> {:unavailable, character_id}
     end
   end

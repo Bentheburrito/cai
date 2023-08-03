@@ -1,12 +1,14 @@
-<.back navigate={~p"/sessions/#{@character.character_id}"} parent_class="mb-2">Back to sessions</.back>
+<.back :if={assigns[:character]} navigate={~p"/sessions/#{@character.character_id}"} parent_class="mb-2">
+  Back to sessions
+</.back>
 
 <div class="flex">
   <div class="flex-col mr-4">
     <.character_header character={assigns[:character]} />
   </div>
 
-  <% {login, logout} = @timestamps %>
-  <div class="flex-col">
+  <% {login, logout} = assigns[:timestamps] || {0, 0} %>
+  <div :if={assigns[:character]} class="flex-col">
     <h3 class="m-2">
       <%= if logout != :offline do %>
         Session from <.timestamp id="session-login" unix_timestamp={login} class="font-bold" /> to
@@ -145,4 +147,4 @@
   <span :if={@live?}><span class="animate-slow-blink">🔴</span> Live</span> Event Feed
 </.event_feed>
 
-<.back navigate={~p"/sessions/#{@character.character_id}"}>Back to sessions</.back>
+<.back :if={assigns[:character]} navigate={~p"/sessions/#{@character.character_id}"}>Back to sessions</.back>
