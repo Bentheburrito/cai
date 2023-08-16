@@ -8,7 +8,7 @@ defmodule CAIWeb.SessionLive.Helpers do
     statics: CAIWeb.static_paths()
 
   import CAI.Guards, only: [is_kill_xp: 1]
-  import Phoenix.{Component, LiveView}
+  import Phoenix.LiveView
 
   alias CAI.ESS.{
     Death,
@@ -22,6 +22,7 @@ defmodule CAIWeb.SessionLive.Helpers do
 
   alias CAI.Characters
   alias CAIWeb.SessionLive.Entry
+  alias CAIWeb.SessionLive.Show.Model
 
   require Logger
 
@@ -49,9 +50,10 @@ defmodule CAIWeb.SessionLive.Helpers do
 
   # catch-all/ordinary event that doesn't need to be condensed
   def handle_ess_event(event, socket) do
-    character = socket.assigns.character
+    character = socket.assigns.model.character
     other = Helpers.get_other_character(character.character_id, event)
-    last_entry = Map.get(socket.assigns, :last_entry, Entry.new(%MetagameEvent{}, %{}))
+
+    last_entry = socket.assigns.model.last_entry || Entry.new(%MetagameEvent{timestamp: :os.system_time(:second)}, %{})
 
     if Helpers.consecutive?(event, last_entry.event) do
       updated_entry = %Entry{last_entry | count: last_entry.count + 1}
@@ -60,7 +62,7 @@ defmodule CAIWeb.SessionLive.Helpers do
         :noreply,
         socket
         |> stream_insert(:events, updated_entry, at: @append, limit: @events_limit)
-        |> assign(:last_entry, updated_entry)
+        |> Model.put(:last_entry, updated_entry)
       }
     else
       entry = Entry.new(event, character, other)
@@ -69,7 +71,7 @@ defmodule CAIWeb.SessionLive.Helpers do
         :noreply,
         socket
         |> stream_insert(:events, entry, at: @prepend, limit: @events_limit)
-        |> assign(:last_entry, entry)
+        |> Model.put(:last_entry, entry)
       }
     end
   end
@@ -77,27 +79,27 @@ defmodule CAIWeb.SessionLive.Helpers do
   defp handle_enrichable_event(event, socket) do
     pending_key = group_key(event)
 
-    pending_groups = socket.assigns.pending_groups
+    pending_groups = socket.assigns.model.pending_groups
 
     if is_map_key(pending_groups, pending_key) do
-      {:noreply, update(socket, :pending_groups, &put_in(&1, [pending_key, :event], event))}
+      {:noreply, Model.update(socket, :pending_groups, &put_in(&1, [pending_key, :event], event))}
     else
       Process.send_after(self(), {:build_entries, pending_key}, @event_pending_delay)
-      {:noreply, update(socket, :pending_groups, &Map.put(&1, pending_key, %{event: event, bonuses: []}))}
+      {:noreply, Model.update(socket, :pending_groups, &Map.put(&1, pending_key, %{event: event, bonuses: []}))}
     end
   end
 
   defp handle_bonus_event(event, socket) do
     pending_key = group_key(event)
 
-    pending_groups = socket.assigns.pending_groups
+    pending_groups = socket.assigns.model.pending_groups
 
     if is_map_key(pending_groups, pending_key) do
       updater = fn groups -> update_in(groups, [pending_key, :bonuses], &[event | &1]) end
-      {:noreply, update(socket, :pending_groups, updater)}
+      {:noreply, Model.update(socket, :pending_groups, updater)}
     else
       Process.send_after(self(), {:build_entries, pending_key}, @event_pending_delay)
-      {:noreply, update(socket, :pending_groups, &Map.put(&1, pending_key, %{event: nil, bonuses: [event]}))}
+      {:noreply, Model.update(socket, :pending_groups, &Map.put(&1, pending_key, %{event: nil, bonuses: [event]}))}
     end
   end
 
