@@ -1,21 +1,21 @@
-<.back :if={assigns[:character]} navigate={~p"/sessions/#{@character.character_id}"} parent_class="mb-2">
+<.back :if={@model.character} navigate={~p"/sessions/#{@model.character.character_id}"} parent_class="mb-2">
   Back to sessions
 </.back>
 
 <div class="flex">
   <div class="flex-col mr-4">
-    <.character_header character={assigns[:character]} />
+    <.character_header character={@model.character} />
   </div>
 
-  <% {login, logout} = assigns[:timestamps] || {0, 0} %>
-  <div :if={assigns[:character]} class="flex-col">
+  <% {login, logout} = @model.timestamps || {0, 0} %>
+  <div :if={@model.character} class="flex-col">
     <h3 class="m-2">
       <%= if logout != :offline do %>
         Session from <.timestamp id="session-login" unix_timestamp={login} class="font-bold" /> to
         <.timestamp id="session-logout" unix_timestamp={logout} class="font-bold" />
         <br /> Lasted <span class="font-bold"><%= format_duration(login, logout) %></span>
       <% else %>
-        <%= @character.name_first %> is offline.
+        <%= @model.character.name_first %> is offline.
       <% end %>
     </h3>
   </div>
@@ -23,7 +23,7 @@
 
 <% duration_mins = if logout != :offline, do: Float.round((logout - login) / 60, 2), else: 0 %>
 
-<div :if={assigns[:aggregates]}>
+<div :if={@model.aggregates}>
   <h3 class="m-2">
     Aggregate Stats
   </h3>
@@ -34,56 +34,62 @@
       <th class="p-1 pl-2 border-solid border-b border-gray-200" title="Infantry vs. Infantry">IvI</th>
       <tr>
         <td class="p-1 pl-2 border-r">Kills</td>
-        <td class="p-1 pl-2"><%= @aggregates.kill_count %></td>
-        <td class="p-1 pl-2"><%= @aggregates.kill_ivi_count %></td>
+        <td class="p-1 pl-2"><%= @model.aggregates.kill_count %></td>
+        <td class="p-1 pl-2"><%= @model.aggregates.kill_ivi_count %></td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r">Headshots</td>
-        <td class="p-1 pl-2"><%= @aggregates.kill_hs_count %></td>
-        <td class="p-1 pl-2"><%= @aggregates.kill_hs_ivi_count %></td>
+        <td class="p-1 pl-2"><%= @model.aggregates.kill_hs_count %></td>
+        <td class="p-1 pl-2"><%= @model.aggregates.kill_hs_ivi_count %></td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r">Deaths</td>
-        <td class="p-1 pl-2"><%= @aggregates.death_count %></td>
-        <td class="p-1 pl-2"><%= @aggregates.death_ivi_count %></td>
+        <td class="p-1 pl-2"><%= @model.aggregates.death_count %></td>
+        <td class="p-1 pl-2"><%= @model.aggregates.death_ivi_count %></td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r" title="Kill/Death Ratio">KDR</td>
         <td
           class="p-1 pl-2"
-          title={"# total kills / # total deaths => #{@aggregates.kill_count} / #{@aggregates.death_count}"}
+          title={"# total kills / # total deaths => #{@model.aggregates.kill_count} / #{@model.aggregates.death_count}"}
         >
-          <%= Float.round(safe_divide(@aggregates.kill_count, @aggregates.death_count), 2) %>
+          <%= Float.round(safe_divide(@model.aggregates.kill_count, @model.aggregates.death_count), 2) %>
         </td>
         <td
           class="p-1 pl-2"
-          title={"# IvI kills / # IvI deaths => #{@aggregates.kill_ivi_count} / #{@aggregates.death_ivi_count}"}
+          title={"# IvI kills / # IvI deaths => #{@model.aggregates.kill_ivi_count} / #{@model.aggregates.death_ivi_count}"}
         >
-          <%= Float.round(safe_divide(@aggregates.kill_ivi_count, @aggregates.death_ivi_count), 2) %>
+          <%= Float.round(safe_divide(@model.aggregates.kill_ivi_count, @model.aggregates.death_ivi_count), 2) %>
         </td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r" title="Kills/Minute">KPM</td>
-        <td class="p-1 pl-2" title={"# total kills / minutes played => #{@aggregates.kill_count} / #{duration_mins}"}>
-          <%= Float.round(safe_divide(@aggregates.kill_count, duration_mins), 2) %>
+        <td
+          class="p-1 pl-2"
+          title={"# total kills / minutes played => #{@model.aggregates.kill_count} / #{duration_mins}"}
+        >
+          <%= Float.round(safe_divide(@model.aggregates.kill_count, duration_mins), 2) %>
         </td>
-        <td class="p-1 pl-2" title={"# IvI kills / minutes played => #{@aggregates.kill_ivi_count} / #{duration_mins}"}>
-          <%= Float.round(safe_divide(@aggregates.kill_ivi_count, duration_mins), 2) %>
+        <td
+          class="p-1 pl-2"
+          title={"# IvI kills / minutes played => #{@model.aggregates.kill_ivi_count} / #{duration_mins}"}
+        >
+          <%= Float.round(safe_divide(@model.aggregates.kill_ivi_count, duration_mins), 2) %>
         </td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r" title="Headshot Ratio">HSR</td>
         <td
           class="p-1 pl-2"
-          title={"# headshot kills / # total kills => #{@aggregates.kill_hs_count} / #{@aggregates.kill_count}"}
+          title={"# headshot kills / # total kills => #{@model.aggregates.kill_hs_count} / #{@model.aggregates.kill_count}"}
         >
-          <%= Float.round(safe_divide(@aggregates.kill_hs_count, @aggregates.kill_count) * 100, 2) %>%
+          <%= Float.round(safe_divide(@model.aggregates.kill_hs_count, @model.aggregates.kill_count) * 100, 2) %>%
         </td>
         <td
           class="p-1 pl-2"
-          title={"# IvI headshot kills / # IvI kills => #{@aggregates.kill_hs_ivi_count} / #{@aggregates.kill_ivi_count}"}
+          title={"# IvI headshot kills / # IvI kills => #{@model.aggregates.kill_hs_ivi_count} / #{@model.aggregates.kill_ivi_count}"}
         >
-          <%= Float.round(safe_divide(@aggregates.kill_hs_ivi_count, @aggregates.kill_ivi_count) * 100, 2) %>%
+          <%= Float.round(safe_divide(@model.aggregates.kill_hs_ivi_count, @model.aggregates.kill_ivi_count) * 100, 2) %>%
         </td>
       </tr>
       <th class="p-1 pl-2 border-solid border-b border-r border-gray-200" title="Vehicle-related stats">Vehicle</th>
@@ -91,47 +97,47 @@
       <th class="p-1 pl-2 border-solid border-b border-gray-200" title="Total Nanite Cost">Nanites</th>
       <tr>
         <td class="p-1 pl-2 border-r">Destroyed</td>
-        <td class="p-1 pl-2"><%= @aggregates.vehicle_kill_count %></td>
-        <td class="p-1 pl-2"><%= @aggregates.nanites_destroyed %></td>
+        <td class="p-1 pl-2"><%= @model.aggregates.vehicle_kill_count %></td>
+        <td class="p-1 pl-2"><%= @model.aggregates.nanites_destroyed %></td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r">Lost</td>
-        <td class="p-1 pl-2"><%= @aggregates.vehicle_death_count %></td>
-        <td class="p-1 pl-2"><%= @aggregates.nanites_lost %></td>
+        <td class="p-1 pl-2"><%= @model.aggregates.vehicle_death_count %></td>
+        <td class="p-1 pl-2"><%= @model.aggregates.nanites_lost %></td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r" title="Kill/Death Ratio (Destroyed / Lost)">KDR</td>
         <td
           class="p-1 pl-2"
-          title={"# vehicles destroyed / # vehicles lost => #{@aggregates.vehicle_kill_count} / #{@aggregates.vehicle_death_count}"}
+          title={"# vehicles destroyed / # vehicles lost => #{@model.aggregates.vehicle_kill_count} / #{@model.aggregates.vehicle_death_count}"}
         >
-          <%= Float.round(safe_divide(@aggregates.vehicle_kill_count, @aggregates.vehicle_death_count), 2) %>
+          <%= Float.round(safe_divide(@model.aggregates.vehicle_kill_count, @model.aggregates.vehicle_death_count), 2) %>
         </td>
         <td
           class="p-1 pl-2"
-          title={"# nanites destroyed / # nanites lost => #{@aggregates.nanites_destroyed} / #{@aggregates.nanites_lost}"}
+          title={"# nanites destroyed / # nanites lost => #{@model.aggregates.nanites_destroyed} / #{@model.aggregates.nanites_lost}"}
         >
-          <%= Float.round(safe_divide(@aggregates.nanites_destroyed, @aggregates.nanites_lost), 2) %>
+          <%= Float.round(safe_divide(@model.aggregates.nanites_destroyed, @model.aggregates.nanites_lost), 2) %>
         </td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r" title="Vehicle Kills/Minute">KPM</td>
         <td
           class="p-1 pl-2"
-          title={"# total vehicle kills / minutes played => #{@aggregates.vehicle_kill_count} / #{duration_mins}"}
+          title={"# total vehicle kills / minutes played => #{@model.aggregates.vehicle_kill_count} / #{duration_mins}"}
         >
-          <%= Float.round(safe_divide(@aggregates.vehicle_kill_count, duration_mins), 2) %>
+          <%= Float.round(safe_divide(@model.aggregates.vehicle_kill_count, duration_mins), 2) %>
         </td>
         <td
           class="p-1 pl-2"
-          title={"# nanites destroyed / minutes played => #{@aggregates.nanites_destroyed} / #{duration_mins}"}
+          title={"# nanites destroyed / minutes played => #{@model.aggregates.nanites_destroyed} / #{duration_mins}"}
         >
-          <%= Float.round(safe_divide(@aggregates.nanites_destroyed, duration_mins), 2) %>
+          <%= Float.round(safe_divide(@model.aggregates.nanites_destroyed, duration_mins), 2) %>
         </td>
       </tr>
     </table>
     <div class="flex-col ml-4">
-      XP Earned: <%= @aggregates.xp_earned %> <br /> Revive Count: <%= @aggregates.revive_count %> <br />
+      XP Earned: <%= @model.aggregates.xp_earned %> <br /> Revive Count: <%= @model.aggregates.revive_count %> <br />
       <br />
       Note: you can hover over some headers to see a more descriptive title, or hover over certain cells to see how they're calculated
     </div>
@@ -141,10 +147,10 @@
 <.event_feed
   :if={assigns[:streams][:events]}
   entry_stream={@streams.events}
-  loading_more?={@loading_more?}
-  more_events?={is_list(assigns[:remaining_events]) and not match?([], assigns[:remaining_events])}
+  loading_more?={@model.loading_more?}
+  more_events?={is_list(@model.remaining_events) and not match?([], @model.remaining_events)}
 >
-  <span :if={@live?}><span class="animate-slow-blink">🔴</span> Live</span> Event Feed
+  <span :if={@model.live?}><span class="animate-slow-blink">🔴</span> Live</span> Event Feed
 </.event_feed>
 
-<.back :if={assigns[:character]} navigate={~p"/sessions/#{@character.character_id}"}>Back to sessions</.back>
+<.back :if={assigns[:character]} navigate={~p"/sessions/#{@model.character.character_id}"}>Back to sessions</.back>

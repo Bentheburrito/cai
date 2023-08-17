@@ -15,6 +15,7 @@ defmodule CAIWeb.SessionLive.Show do
   alias CAI.Characters.Character
   alias CAI.Characters.Session
   alias CAIWeb.SessionLive.Entry
+  alias CAIWeb.SessionLive.Show.Model
   alias Phoenix.PubSub
 
   require Logger
@@ -31,8 +32,7 @@ defmodule CAIWeb.SessionLive.Show do
     {
       :ok,
       socket
-      |> assign(:live?, false)
-      |> assign(:loading_more?, false)
+      |> assign(:model, Model.new())
       |> stream_configure(:events, dom_id: &CAIWeb.SessionLive.Helpers.event_to_dom_id/1)
     }
   end
@@ -52,14 +52,16 @@ defmodule CAIWeb.SessionLive.Show do
       {
         :noreply,
         socket
-        |> assign(:aggregates, Map.take(session, Session.aggregate_fields()))
-        |> assign(:character, character)
         |> stream(:events, [], reset: true, at: @append, limit: @events_limit)
-        |> assign(:live?, false)
-        |> assign(:loading_more?, true)
-        |> assign(:page_title, "#{character.name_first}'s Previous Session")
-        |> assign(:remaining_events, remaining_events)
-        |> assign(:timestamps, {login, logout})
+        |> Model.put(
+          aggregates: Map.take(session, Session.aggregate_fields()),
+          character: character,
+          live?: false,
+          loading_more?: true,
+          page_title: "#{character.name_first}'s Previous Session",
+          remaining_events: remaining_events,
+          timestamps: {login, logout}
+        )
       }
     else
       {:error, changeset} ->
@@ -94,8 +96,8 @@ defmodule CAIWeb.SessionLive.Show do
          {:ok, _c, timestamps} <- Characters.get_session_boundaries(character.character_id, 1) do
       if connected?(socket) do
         # Unsubscribe from the previously tracked character (if there is one)
-        if socket.assigns[:character] do
-          PubSub.unsubscribe(CAI.PubSub, "ess:#{socket.assigns.character.character_id}")
+        if socket.assigns.model.character do
+          PubSub.unsubscribe(CAI.PubSub, "ess:#{socket.assigns.model.character.character_id}")
         end
 
         PubSub.subscribe(CAI.PubSub, "ess:#{character.character_id}")
@@ -147,13 +149,15 @@ defmodule CAIWeb.SessionLive.Show do
       {
         :noreply,
         socket
-        |> assign(:aggregates, aggregates)
-        |> assign(:character, character)
         |> stream(:events, [], at: @prepend, limit: @events_limit)
-        |> assign(:live?, true)
-        |> assign(:page_title, "#{character.name_first}'s Session")
-        |> assign(:pending_groups, %{})
-        |> assign(:timestamps, timestamps)
+        |> Model.put(
+          aggregates: aggregates,
+          character: character,
+          live?: true,
+          page_title: "#{character.name_first}'s Session",
+          pending_groups: %{},
+          timestamps: timestamps
+        )
       }
     end
   end
@@ -161,22 +165,22 @@ defmodule CAIWeb.SessionLive.Show do
   ### HANDLE EVENTS AND MESSAGES ###
 
   # Make "Load More" button presses synchronous
-  def handle_event("load-more-events", _params, %{assigns: %{loading_more?: true}} = socket) do
+  def handle_event("load-more-events", _params, %{assigns: %{model: %Model{loading_more?: true}}} = socket) do
     {:noreply, socket}
   end
 
   # Stream some more events (if there are any) when "Load More" is clicked
   @impl true
   def handle_event("load-more-events", _params, socket) do
-    case split_events_while(socket.assigns.remaining_events, @events_limit) do
+    case split_events_while(socket.assigns.model.remaining_events, @events_limit) do
       {[], _, _} ->
-        {:noreply, assign(socket, :remaining_events, [])}
+        {:noreply, Model.put(socket, :remaining_events, [])}
 
       {events_to_stream, remaining_events, events_limit} ->
-        new_events_limit = Map.get(socket.assigns, :events_limit, @events_limit) + events_limit
-        bulk_append(events_to_stream, socket.assigns.character, new_events_limit)
+        new_events_limit = socket.assigns.model.events_limit + events_limit
+        bulk_append(events_to_stream, socket.assigns.model.character, new_events_limit)
 
-        {:noreply, socket |> assign(:remaining_events, remaining_events) |> assign(:loading_more?, true)}
+        {:noreply, Model.put(socket, remaining_events: remaining_events, loading_more?: true)}
     end
   end
 
@@ -196,8 +200,7 @@ defmodule CAIWeb.SessionLive.Show do
       :noreply,
       socket
       |> stream(:events, entries, at: @append, limit: new_events_limit)
-      |> assign(:events_limit, new_events_limit)
-      |> assign(:loading_more?, false)
+      |> Model.put(events_limit: new_events_limit, loading_more?: false)
     }
   end
 
@@ -205,11 +208,11 @@ defmodule CAIWeb.SessionLive.Show do
   @impl true
   def handle_info({:event, %Ecto.Changeset{} = event_cs}, socket) do
     event = Ecto.Changeset.apply_changes(event_cs)
-    %{aggregates: aggregates, character: %{character_id: character_id}} = socket.assigns
+    %Model{aggregates: aggregates, character: %{character_id: character_id}} = socket.assigns.model
 
     aggregates = Session.put_aggregate_event(event, aggregates, character_id)
 
-    socket = assign(socket, :aggregates, aggregates)
+    socket = Model.put(socket, :aggregates, aggregates)
 
     handle_ess_event(event, socket)
   end
@@ -217,9 +220,9 @@ defmodule CAIWeb.SessionLive.Show do
   # Live Session - we've waited long enough to receive a primary event and any bonuses, so combine them into an Entry.
   @impl true
   def handle_info({:build_entries, pending_key}, socket) do
-    case Map.fetch(socket.assigns.pending_groups, pending_key) do
+    case Map.fetch(socket.assigns.model.pending_groups, pending_key) do
       {:ok, group} ->
-        character = socket.assigns.character
+        character = socket.assigns.model.character
 
         character_map =
           with [%{character_id: _} | _] <- group.bonuses,
@@ -238,7 +241,7 @@ defmodule CAIWeb.SessionLive.Show do
         {
           :noreply,
           socket
-          |> update(:pending_groups, &Map.delete(&1, pending_key))
+          |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
           |> stream(:events, entries, at: @prepend, limit: @events_limit)
         }
 
@@ -252,17 +255,17 @@ defmodule CAIWeb.SessionLive.Show do
   @impl true
   def handle_info(:time_update, socket) do
     last_entry =
-      Map.get_lazy(socket.assigns, :last_entry, fn ->
-        case socket.assigns.timestamps do
-          {_login, :offline} -> Entry.new(%MetagameEvent{timestamp: 0}, %{})
-          {_login, logout} -> Entry.new(%MetagameEvent{timestamp: logout}, %{})
-        end
-      end)
+      case {socket.assigns.model.last_entry, socket.assigns.model.timestamps} do
+        {%Entry{} = last_entry, _} -> last_entry
+        {_, {_login, :offline}} -> Entry.new(%MetagameEvent{timestamp: 0}, %{})
+        {_, {_login, logout}} -> Entry.new(%MetagameEvent{timestamp: logout}, %{})
+        {_, nil} -> Entry.new(%MetagameEvent{timestamp: :os.system_time(:second)}, %{})
+      end
 
     if Helpers.online?(last_entry.event) do
-      {login, _logout} = Map.fetch!(socket.assigns, :timestamps)
+      {login, _logout} = socket.assigns.model.timestamps || {0, 0}
       Process.send_after(self(), :time_update, @time_update_interval)
-      {:noreply, assign(socket, :timestamps, {login, :os.system_time(:second)})}
+      {:noreply, Model.put(socket, :timestamps, {login, :os.system_time(:second)})}
     else
       {:noreply, socket}
     end
