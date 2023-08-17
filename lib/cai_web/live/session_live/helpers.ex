@@ -29,7 +29,6 @@ defmodule CAIWeb.SessionLive.Helpers do
   @prepend 0
   @append -1
   @events_limit 15
-  @time_update_interval 3000
 
   # Death or PlayerFacilityCapture/Defend primary event
   @enrichable_events [Death, PlayerFacilityCapture, PlayerFacilityDefend]
