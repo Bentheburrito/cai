@@ -64,10 +64,16 @@
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r" title="Kills/Minute">KPM</td>
-        <td class="p-1 pl-2" title={"# total kills / minutes played => #{@model.aggregates.kill_count} / #{duration_mins}"}>
+        <td
+          class="p-1 pl-2"
+          title={"# total kills / minutes played => #{@model.aggregates.kill_count} / #{duration_mins}"}
+        >
           <%= Float.round(safe_divide(@model.aggregates.kill_count, duration_mins), 2) %>
         </td>
-        <td class="p-1 pl-2" title={"# IvI kills / minutes played => #{@model.aggregates.kill_ivi_count} / #{duration_mins}"}>
+        <td
+          class="p-1 pl-2"
+          title={"# IvI kills / minutes played => #{@model.aggregates.kill_ivi_count} / #{duration_mins}"}
+        >
           <%= Float.round(safe_divide(@model.aggregates.kill_ivi_count, duration_mins), 2) %>
         </td>
       </tr>
