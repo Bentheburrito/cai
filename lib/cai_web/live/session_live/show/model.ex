@@ -1,4 +1,8 @@
 defmodule CAIWeb.SessionLive.Show.Model do
+  @moduledoc """
+  A struct to hold assigns and helper functions for modifications for SessionLive.Show
+  """
+
   import Phoenix.Component, only: [assign: 3]
 
   alias CAI.Characters.Session
@@ -24,7 +28,7 @@ defmodule CAIWeb.SessionLive.Show.Model do
   @doc """
   Create a new Model struct with default values.
   """
-  def new(), do: %Model{}
+  def new, do: %Model{}
 
   @doc """
   Updates the model in the assigns of the given `socket`.
