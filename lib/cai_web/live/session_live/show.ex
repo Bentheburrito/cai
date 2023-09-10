@@ -14,7 +14,7 @@ defmodule CAIWeb.SessionLive.Show do
   alias CAI.Characters
   alias CAI.Characters.Character
   alias CAI.Characters.Session
-  alias CAIWeb.SessionLive.Entry
+  alias CAIWeb.SessionLive.{Blurbs, Entry}
   alias CAIWeb.SessionLive.Show.Model
   alias Phoenix.PubSub
 
@@ -184,6 +184,36 @@ defmodule CAIWeb.SessionLive.Show do
     end
   end
 
+  def handle_event("toggle-blurbs", _params, socket) do
+    {
+      :noreply,
+      Model.update(socket, :blurbs, fn
+        :disabled -> {:enabled, %Blurbs{}}
+        _ -> :disabled
+      end)
+    }
+  end
+
+  def handle_event("blurb-ended", _params, socket) do
+    with {:enabled, %Blurbs{} = blurbs} <- socket.assigns.model.blurbs,
+         [next_category | rest] <- blurbs.track_queue,
+         {:ok, track_filename} <- Blurbs.get_random_blurb_filename(next_category, blurbs) do
+      {
+        :noreply,
+        socket
+        |> push_event("play-blurb", %{"track" => track_filename})
+        |> Model.put(:blurbs, {:enabled, %Blurbs{blurbs | playing?: true, track_queue: rest}})
+      }
+    else
+      _ ->
+        {:noreply,
+         Model.update(socket, :blurbs, fn
+           {:enabled, %Blurbs{} = blurbs} -> {:enabled, %Blurbs{blurbs | playing?: false}}
+           :disabled -> :disabled
+         end)}
+    end
+  end
+
   defp bulk_append(events_to_stream, character, new_events_limit) do
     liveview = self()
 
@@ -213,6 +243,7 @@ defmodule CAIWeb.SessionLive.Show do
     aggregates = Session.put_aggregate_event(event, aggregates, character_id)
 
     socket = Model.put(socket, :aggregates, aggregates)
+    socket = Blurbs.maybe_push_blurb(event, socket)
 
     handle_ess_event(event, socket)
   end

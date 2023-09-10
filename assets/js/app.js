@@ -72,6 +72,23 @@ const Hooks = {
     updated () {
       hoverFormatTimestamp(this);
     }
+  },
+  BlurbPlayer: {
+    mounted () {
+      this.handleEvent("play-blurb", ({ track }) => {
+        // Need to remove the . in extension names since it messes with querySelector
+        track = track.replace(".", "");
+        let audioElement = document.querySelector(`#blurb-source-${track}`);
+        if (audioElement) audioElement.play();
+      });
+    }
+  },
+  BlurbSource: {
+    mounted () {
+      this.el.addEventListener("ended", _event => {
+        this.pushEvent("blurb-ended", {});
+      });
+    }
   }
 };
 

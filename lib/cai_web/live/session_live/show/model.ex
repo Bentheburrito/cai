@@ -22,6 +22,7 @@ defmodule CAIWeb.SessionLive.Show.Model do
             loading_more?: false,
             page_title: "Character Session",
             pending_groups: %{},
+            blurbs: :disabled,
             remaining_events: [],
             timestamps: nil
 

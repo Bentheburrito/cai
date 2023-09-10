@@ -8,7 +8,7 @@
   </div>
 
   <% {login, logout} = @model.timestamps || {0, 0} %>
-  <div :if={@model.character} class="flex-col">
+  <div :if={@model.character} class="flex flex-col justify-between">
     <h3 class="m-2">
       <%= if logout != :offline do %>
         Session from <.timestamp id="session-login" unix_timestamp={login} class="font-bold" /> to
@@ -18,6 +18,22 @@
         <%= @model.character.name_first %> is offline.
       <% end %>
     </h3>
+    <.button :if={@model.live?} id="toggle-blurbs-button" phx-click="toggle-blurbs">
+      <%= case @model.blurbs do %>
+        <% :disabled -> %>
+          <span>🔇 Turn on Blurbs</span>
+        <% {:enabled, %Blurbs{} = blurbs} -> %>
+          <span id="blurb-player" phx-hook="BlurbPlayer">🔊 Turn off Blurbs</span>
+          <%!-- Need to remove the . in extension names since it messes with querySelector --%>
+          <audio
+            :for={source <- Blurbs.track_paths(blurbs.voicepack)}
+            src={source}
+            id={"blurb-source-#{source |> String.split("/") |> List.last() |> String.replace(".", "")}"}
+            phx-hook="BlurbSource"
+          >
+          </audio>
+      <% end %>
+    </.button>
   </div>
 </div>
 

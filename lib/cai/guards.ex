@@ -3,8 +3,6 @@ defmodule CAI.Guards do
   Guards and conditional functions
   """
 
-  require CAI.Guards
-
   import Bitwise
 
   @xp_guard_data_path System.get_env("GUARD_DATA_PATH", "./guard_data/xp.pairs")
