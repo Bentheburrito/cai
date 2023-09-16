@@ -52,7 +52,8 @@ defmodule CAIWeb.SessionLive.Blurbs do
             last_kill_timestamp: 0,
             voicepack: "crashmore",
             track_queue: [],
-            playing?: false
+            playing?: false,
+            volume: 50
 
   def maybe_push_blurb(event, socket) do
     case socket.assigns.model.blurbs do

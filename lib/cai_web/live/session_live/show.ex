@@ -233,6 +233,23 @@ defmodule CAIWeb.SessionLive.Show do
     }
   end
 
+  def handle_event("blurb-vol-change", %{"blurb-volume" => value}, socket) do
+    value = String.to_integer(value)
+
+    {
+      :noreply,
+      socket
+      |> push_event("change-blurb-volume", %{"value" => value})
+      |> Model.update(:blurbs, fn
+        {:enabled, %Blurbs{} = blurbs} ->
+          {:enabled, %Blurbs{blurbs | volume: value}}
+
+        :disabled ->
+          :disabled
+      end)
+    }
+  end
+
   defp push_login_blurb(socket) do
     with {:enabled, %Blurbs{} = blurbs} <- socket.assigns.model.blurbs,
          {:ok, track_filename} <- Blurbs.get_random_blurb_filename("login", blurbs) do

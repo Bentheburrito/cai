@@ -23,17 +23,41 @@
       for={%{"voicepack-select" => elem(@model.blurbs, 1).voicepack}}
       phx-change="voicepack-selected"
       id="voicepack-selector-form"
+      class=""
     >
-      <% option_mapper = fn option -> {option |> String.split("_") |> Enum.map_join(" ", &String.capitalize/1), option} end %>
+      <% option_mapper = fn option ->
+        {option |> String.split("_") |> Enum.map_join(" ", &String.capitalize/1), option}
+      end %>
       <.input
         type="select"
         name="voicepack-select"
         id="voicepack-selector"
         options={Enum.map(Blurbs.voicepacks(), option_mapper)}
-        value="voicepack"
+        value={elem(@model.blurbs, 1).voicepack}
       >
       </.input>
     </.simple_form>
+
+    <.simple_form
+      :if={@model.live? and @model.blurbs != :disabled}
+      for={%{"blurb-volume" => elem(@model.blurbs, 1).volume}}
+      phx-change="blurb-vol-change"
+      id="blurb-volume-form"
+      class=""
+    >
+      <input
+        type="range"
+        id="blurb-volume-slider"
+        name="blurb-volume"
+        min="0"
+        max="100"
+        step="5"
+        value={elem(@model.blurbs, 1).volume}
+        phx-hook="BlurbVolumeControl"
+        phx-debounce="120"
+      >
+    </.simple_form>
+
     <.button :if={@model.live?} id="toggle-blurbs-button" phx-click="toggle-blurbs">
       <%= case @model.blurbs do %>
         <% :disabled -> %>
@@ -45,6 +69,7 @@
             :for={source <- Blurbs.track_paths(blurbs.voicepack)}
             src={source}
             id={"blurb-source-#{source |> String.split("/") |> List.last() |> String.replace(".", "")}"}
+            class="blurb-source-audio"
             phx-hook="BlurbSource"
           >
           </audio>

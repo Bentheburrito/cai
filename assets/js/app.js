@@ -89,6 +89,17 @@ const Hooks = {
         this.pushEvent("blurb-ended", {});
       });
     }
+  },
+  BlurbVolumeControl: {
+    mounted () {
+      this.handleEvent("change-blurb-volume", ({ value }) => {
+        let audioElements = document.querySelectorAll(`.blurb-source-audio`);
+        for (let audio of audioElements) {
+          audio.volume = value / 100;
+        }
+        console.log(`Set to ${value}`)
+      });
+    }
   }
 };
 
