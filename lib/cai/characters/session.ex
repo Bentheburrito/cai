@@ -211,7 +211,7 @@ defmodule CAI.Characters.Session do
   end
 
   def put_aggregate_event(%VehicleDestroy{} = vd, params, character_id) do
-    vehicle_cost = CAI.get_vehicle(vd.vehicle_id)["cost"]
+    vehicle_cost = CAI.get_vehicle(vd.vehicle_id)["cost"] || 0
 
     if vd.character_id == character_id do
       params
