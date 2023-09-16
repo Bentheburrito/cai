@@ -185,12 +185,16 @@ defmodule CAIWeb.SessionLive.Show do
   end
 
   def handle_event("toggle-blurbs", _params, socket) do
+    voicepack = List.first(Blurbs.voicepacks())
+
     {
       :noreply,
-      Model.update(socket, :blurbs, fn
-        :disabled -> {:enabled, %Blurbs{}}
+      socket
+      |> Model.update(:blurbs, fn
+        :disabled -> {:enabled, %Blurbs{voicepack: voicepack}}
         _ -> :disabled
       end)
+      |> push_login_blurb()
     }
   end
 
@@ -211,6 +215,30 @@ defmodule CAIWeb.SessionLive.Show do
            {:enabled, %Blurbs{} = blurbs} -> {:enabled, %Blurbs{blurbs | playing?: false}}
            :disabled -> :disabled
          end)}
+    end
+  end
+
+  def handle_event("voicepack-selected", %{"voicepack-select" => voicepack}, socket) do
+    {
+      :noreply,
+      socket
+      |> Model.update(:blurbs, fn
+        {:enabled, %Blurbs{} = blurbs} ->
+          {:enabled, %Blurbs{blurbs | voicepack: voicepack}}
+
+        :disabled ->
+          :disabled
+      end)
+      |> push_login_blurb()
+    }
+  end
+
+  defp push_login_blurb(socket) do
+    with {:enabled, %Blurbs{} = blurbs} <- socket.assigns.model.blurbs,
+         {:ok, track_filename} <- Blurbs.get_random_blurb_filename("login", blurbs) do
+      push_event(socket, "play-blurb", %{"track" => track_filename})
+    else
+      _ -> socket
     end
   end
 

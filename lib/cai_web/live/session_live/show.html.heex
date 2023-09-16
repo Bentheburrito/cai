@@ -18,6 +18,22 @@
         <%= @model.character.name_first %> is offline.
       <% end %>
     </h3>
+    <.simple_form
+      :if={@model.live? and @model.blurbs != :disabled}
+      for={%{"voicepack-select" => elem(@model.blurbs, 1).voicepack}}
+      phx-change="voicepack-selected"
+      id="voicepack-selector-form"
+    >
+      <% option_mapper = fn option -> {option |> String.split("_") |> Enum.map_join(" ", &String.capitalize/1), option} end %>
+      <.input
+        type="select"
+        name="voicepack-select"
+        id="voicepack-selector"
+        options={Enum.map(Blurbs.voicepacks(), option_mapper)}
+        value="voicepack"
+      >
+      </.input>
+    </.simple_form>
     <.button :if={@model.live?} id="toggle-blurbs-button" phx-click="toggle-blurbs">
       <%= case @model.blurbs do %>
         <% :disabled -> %>

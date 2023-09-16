@@ -38,6 +38,8 @@ defmodule CAIWeb.SessionLive.Blurbs do
                Map.update(blurbs, vp, %{category => filenames}, &Map.put(&1, category, filenames))
            end)
 
+  def voicepacks, do: @voicepacks
+
   def track_paths(voicepack) do
     category_map = Map.fetch!(@blurbs, voicepack)
 
