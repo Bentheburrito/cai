@@ -86,7 +86,6 @@ defmodule CAI.ESS.Helpers do
         other
 
       {:ok, other_id} ->
-        IO.inspect other_id, label: "other id get_other_character"
         {:being_fetched, other_id}
 
       {{:ok, :not_found}, other_id} ->

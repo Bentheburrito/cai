@@ -146,7 +146,7 @@ defmodule CAIWeb.SessionLive.Entry do
     case Map.get(character_map, character_id) do
       %Character{} = c -> c
       {:unavailable, other_id} -> {:unavailable, other_id}
-      {:being_fetched, other_id} -> {:being_fetched, other_id |> IO.inspect(label: "other id")}
+      {:being_fetched, other_id} -> {:being_fetched, other_id}
       res when res in [nil, :not_found, :error] -> {:unavailable, character_id}
     end
   end
