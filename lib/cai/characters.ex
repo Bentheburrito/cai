@@ -108,6 +108,26 @@ defmodule CAI.Characters do
   end
 
   @doc """
+  Similar to `fetch/1`, but immediately returns `:ok` and sends the caller a message
+  with the result of the query.
+
+  The message takes the form of `{:fetched, character_reference, query_result}`, where
+  `character_reference` is the referenced passed to this function, and `query_result`
+  is one of `{:ok, Character.t()} | :not_found | :error`
+  """
+  @spec fetch_later(character_reference()) :: :ok
+  def fetch_later(character_reference) do
+    caller = self()
+
+    Task.start_link(fn ->
+      query_result = fetch(character_reference)
+      send(caller, {:fetched, character_reference, query_result})
+    end)
+
+    :ok
+  end
+
+  @doc """
   Runs the given Census query, optionally transforming the result with the `map_to/1` parameter.
 
   Defaults to a maximum of #{@default_census_attempts} attempts. Returns the same as `fetch/1`.

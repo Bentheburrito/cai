@@ -40,12 +40,17 @@ defmodule CAIWeb.SessionLive.Blurbs do
 
   def voicepacks, do: @voicepacks
 
-  def track_paths(voicepack) do
+  def track_paths(voicepack) when voicepack in @voicepacks do
     category_map = Map.fetch!(@blurbs, voicepack)
 
     for {_category, filenames} <- category_map, filename <- filenames, into: MapSet.new() do
       ~p"/audio/voicepacks/#{voicepack}/tracks/#{filename}"
     end
+  end
+
+  def track_paths(voicepack) do
+    Logger.warning("No voicepack called '#{voicepack}' available.")
+    []
   end
 
   defstruct killing_spree_count: 0,

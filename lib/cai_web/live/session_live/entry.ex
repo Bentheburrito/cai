@@ -27,10 +27,12 @@ defmodule CAIWeb.SessionLive.Entry do
   defstruct event: nil, character: nil, other: :none, count: 1, bonuses: []
   @type t :: %__MODULE__{}
 
+  @type other_character :: Character.t() | {:being_fetched, Characters.character_id()} | :none
+
   @doc """
   Create a new Entry struct
   """
-  @spec new(event :: map(), character :: Character.t(), other :: Character.t() | :none, integer(), [map()]) :: Entry.t()
+  @spec new(event :: map(), character :: Character.t(), other :: other_character(), integer(), [map()]) :: Entry.t()
   def new(event, character, other \\ :none, count \\ 1, bonuses \\ []) do
     %Entry{event: event, character: character, other: other, count: count, bonuses: bonuses}
   end
@@ -144,6 +146,7 @@ defmodule CAIWeb.SessionLive.Entry do
     case Map.get(character_map, character_id) do
       %Character{} = c -> c
       {:unavailable, other_id} -> {:unavailable, other_id}
+      {:being_fetched, other_id} -> {:being_fetched, other_id |> IO.inspect(label: "other id")}
       res when res in [nil, :not_found, :error] -> {:unavailable, character_id}
     end
   end

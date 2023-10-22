@@ -49,9 +49,6 @@ defmodule CAIWeb.SessionLive.Helpers do
 
   # catch-all/ordinary event that doesn't need to be condensed
   def handle_ess_event(event, socket) do
-    character = socket.assigns.model.character
-    other = Helpers.get_other_character(character.character_id, event)
-
     last_entry = socket.assigns.model.last_entry || Entry.new(%MetagameEvent{timestamp: :os.system_time(:second)}, %{})
 
     if Helpers.consecutive?(event, last_entry.event) do
@@ -64,7 +61,22 @@ defmodule CAIWeb.SessionLive.Helpers do
         |> Model.put(:last_entry, updated_entry)
       }
     else
-      entry = Entry.new(event, character, other)
+      character = socket.assigns.model.character
+      other_status = Helpers.get_other_character(character.character_id, event, &Characters.fetch_later/1)
+      entry = Entry.new(event, character, other_status)
+
+      socket =
+        case other_status do
+          {:being_fetched, other_id} ->
+            Model.update(
+              socket,
+              :pending_queries,
+              &Map.update(&1, other_id, [entry], fn entries -> [entry | entries] end)
+            )
+
+          _ ->
+            socket
+        end
 
       {
         :noreply,

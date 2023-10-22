@@ -15,6 +15,7 @@ defmodule CAIWeb.SessionLive.Show.Model do
   defdelegate pop(v, key), to: Map
 
   defstruct aggregates: Map.new(Session.aggregate_fields(), &{&1, 0}),
+            blurbs: :disabled,
             character: nil,
             events_limit: 15,
             last_entry: nil,
@@ -22,7 +23,7 @@ defmodule CAIWeb.SessionLive.Show.Model do
             loading_more?: false,
             page_title: "Character Session",
             pending_groups: %{},
-            blurbs: :disabled,
+            pending_queries: %{},
             remaining_events: [],
             timestamps: nil
 
