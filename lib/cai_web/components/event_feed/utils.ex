@@ -19,6 +19,10 @@ defmodule CAIWeb.EventFeed.Utils do
 
   def link_character(maybe_character, opts \\ [])
 
+  def link_character({:being_fetched, character_id}, opts) do
+    link_character(%Character{character_id: character_id, name_first: "Getting name...", faction_id: 0}, opts)
+  end
+
   def link_character({:unavailable, character_id}, opts) when is_character_id(character_id) do
     possessive? = Keyword.get(opts, :possessive?, false)
 

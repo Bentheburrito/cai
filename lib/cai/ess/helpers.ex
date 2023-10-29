@@ -72,7 +72,8 @@ defmodule CAI.ESS.Helpers do
 
   Given `this_character_id`, an ESS event, and (optionally) a fetch function, will get the other Character for the
   event. Will return `:noop` if the event does not contain a second character ID. If the fetch function does not return
-  `{:ok, Character.t()}`, this function will return `{:unavailable, other_id}`
+  `:ok` or `{:ok, Character.t()}`, this function will return `{:unavailable, other_id}`. If the fetch function returns
+  `:ok` specifically, `{:being_fetched, other_id}` is returned.
   """
   def get_other_character(this_char_id, event, fetch_fn \\ &Characters.fetch/1)
 
@@ -83,6 +84,9 @@ defmodule CAI.ESS.Helpers do
 
       {{:ok, %Character{} = other}, _other_id} ->
         other
+
+      {:ok, other_id} ->
+        {:being_fetched, other_id}
 
       {{:ok, :not_found}, other_id} ->
         Logger.info("Character ID not_found: #{other_id}")

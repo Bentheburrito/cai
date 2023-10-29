@@ -346,4 +346,26 @@ defmodule CAIWeb.SessionLive.Show do
       {:noreply, socket}
     end
   end
+
+  @impl true
+  def handle_info({:fetched, character_id, result}, socket) do
+    {entries, new_pending_queries} = Map.pop(socket.assigns.model.pending_queries, character_id, [])
+    socket = Model.put(socket, :pending_queries, new_pending_queries)
+
+    new_other =
+      case result do
+        {:ok, %Character{} = character} ->
+          character
+
+        res when res in [:not_found, :error] ->
+          {:unavailable, character_id}
+      end
+
+    new_socket =
+      for entry <- entries, reduce: socket do
+        socket -> stream_insert(socket, :events, %Entry{entry | other: new_other}, at: @append)
+      end
+
+    {:noreply, new_socket}
+  end
 end

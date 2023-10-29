@@ -40,12 +40,17 @@ defmodule CAIWeb.SessionLive.Blurbs do
 
   def voicepacks, do: @voicepacks
 
-  def track_paths(voicepack) do
+  def track_paths(voicepack) when voicepack in @voicepacks do
     category_map = Map.fetch!(@blurbs, voicepack)
 
     for {_category, filenames} <- category_map, filename <- filenames, into: MapSet.new() do
       ~p"/audio/voicepacks/#{voicepack}/tracks/#{filename}"
     end
+  end
+
+  def track_paths(voicepack) do
+    Logger.warning("No voicepack called '#{voicepack}' available.")
+    []
   end
 
   defstruct killing_spree_count: 0,
@@ -70,15 +75,7 @@ defmodule CAIWeb.SessionLive.Blurbs do
         # if the track_queue is empty and we're not currently playing anything, play the sound directly.
         # Otherwise, enqueue.
         if match?([], state.track_queue) and not state.playing? do
-          case get_random_blurb_filename(category, state) do
-            {:ok, track_filename} ->
-              socket
-              |> push_event("play-blurb", %{"track" => track_filename})
-              |> Model.put(:blurbs, {:enabled, %Blurbs{state | playing?: true}})
-
-            :error ->
-              socket
-          end
+          play_blurb(category, socket, state)
         else
           # This may be slow, but it's simple, and I don't forsee an obsurd amount of tracks building up
           # The worst case I can think of is mass-death events from e.g. orbital strikes.
@@ -94,12 +91,25 @@ defmodule CAIWeb.SessionLive.Blurbs do
   end
 
   def get_random_blurb_filename(category, %Blurbs{} = state) do
-    with filenames <- get_in(@blurbs, [state.voicepack, category]) do
-      {:ok, Enum.random(filenames)}
-    else
+    case @blurbs[state.voicepack][category] do
+      filenames when not is_nil(filenames) ->
+        {:ok, Enum.random(filenames)}
+
       uhoh ->
         Logger.error("Unable to play blurb: #{inspect(uhoh)}")
         :error
+    end
+  end
+
+  defp play_blurb(category, socket, state) do
+    case get_random_blurb_filename(category, state) do
+      {:ok, track_filename} ->
+        socket
+        |> push_event("play-blurb", %{"track" => track_filename})
+        |> Model.put(:blurbs, {:enabled, %Blurbs{state | playing?: true}})
+
+      :error ->
+        socket
     end
   end
 
