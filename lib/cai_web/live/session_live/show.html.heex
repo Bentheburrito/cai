@@ -55,7 +55,7 @@
         value={elem(@model.blurbs, 1).volume}
         phx-hook="BlurbVolumeControl"
         phx-debounce="120"
-      >
+      />
     </.simple_form>
 
     <.button :if={@model.live?} id="toggle-blurbs-button" phx-click="toggle-blurbs">
