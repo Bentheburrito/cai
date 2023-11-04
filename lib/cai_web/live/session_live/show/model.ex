@@ -6,9 +6,8 @@ defmodule CAIWeb.SessionLive.Show.Model do
   import Phoenix.Component, only: [assign: 3]
 
   alias CAI.Characters.Session
-  alias CAIWeb.SessionLive.Show.Model
 
-  # @enforce_keys [:login, :logout]
+  @enforce_keys [:login, :logout]
   defstruct aggregates: Map.new(Session.aggregate_fields(), &{&1, 0}),
             blurbs: :disabled,
             character: nil,
@@ -20,15 +19,16 @@ defmodule CAIWeb.SessionLive.Show.Model do
             page_title: "Character Session",
             pending_groups: %{},
             pending_queries: %{},
-            remaining_events: []
-
-  # login: nil,
-  # logout: nil
+            remaining_events: [],
+            login: nil,
+            logout: nil
 
   @doc """
   Create a new Model struct with default values.
   """
-  def new, do: %Model{}
+  def new(login, logout) do
+    %__MODULE__{login: login, logout: logout}
+  end
 
   @doc """
   Updates the model in the assigns of the given `socket`.

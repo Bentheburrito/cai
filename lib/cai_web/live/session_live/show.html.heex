@@ -7,13 +7,12 @@
     <.character_header character={@model.character} />
   </div>
 
-  <% {login, logout} = @model.timestamps || {0, 0} %>
   <div :if={@model.character} class="flex flex-col justify-between">
     <h3 class="m-2">
-      <%= if logout != :offline do %>
-        Session from <.timestamp id="session-login" unix_timestamp={login} class="font-bold" /> to
-        <.timestamp id="session-logout" unix_timestamp={logout} class="font-bold" />
-        <br /> Lasted <span class="font-bold"><%= format_duration(login, logout) %></span>
+      <%= if @model.logout != :offline do %>
+        Session from <.timestamp id="session-login" unix_timestamp={@model.login} class="font-bold" /> to
+        <.timestamp id="session-logout" unix_timestamp={@model.logout} class="font-bold" />
+        <br /> Lasted <span class="font-bold"><%= format_duration(@model.login, @model.logout) %></span>
       <% else %>
         <%= @model.character.name_first %> is offline.
       <% end %>
