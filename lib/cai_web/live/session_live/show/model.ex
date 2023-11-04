@@ -8,15 +8,11 @@ defmodule CAIWeb.SessionLive.Show.Model do
   alias CAI.Characters.Session
   alias CAIWeb.SessionLive.Show.Model
 
-  @behaviour Access
-  defdelegate get(v, key, default), to: Map
-  defdelegate fetch(v, key), to: Map
-  defdelegate get_and_update(v, key, func), to: Map
-  defdelegate pop(v, key), to: Map
-
+  # @enforce_keys [:login, :logout]
   defstruct aggregates: Map.new(Session.aggregate_fields(), &{&1, 0}),
             blurbs: :disabled,
             character: nil,
+            duration_mins: 0,
             events_limit: 15,
             last_entry: nil,
             live?: false,
@@ -24,8 +20,10 @@ defmodule CAIWeb.SessionLive.Show.Model do
             page_title: "Character Session",
             pending_groups: %{},
             pending_queries: %{},
-            remaining_events: [],
-            timestamps: nil
+            remaining_events: []
+
+  # login: nil,
+  # logout: nil
 
   @doc """
   Create a new Model struct with default values.
