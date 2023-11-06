@@ -43,13 +43,23 @@ defmodule CAIWeb.SessionLive.Helpers do
   end
 
   # facility control bonus event
-  def handle_ess_event(%FacilityControl{} = event, socket) do
+  def handle_ess_event(%FacilityControl{world_id: world_id} = event, socket)
+      when world_id == socket.assigns.model.world_id do
     handle_bonus_event(event, socket)
+  end
+
+  def handle_ess_event(%FacilityControl{}, socket) do
+    {:noreply, socket}
   end
 
   # catch-all/ordinary event that doesn't need to be condensed
   def handle_ess_event(event, socket) do
     last_entry = socket.assigns.model.last_entry || Entry.new(%MetagameEvent{timestamp: :os.system_time(:second)}, %{})
+
+    socket =
+      if is_map_key(event, :world_id) and not match?(%FacilityControl{}, event),
+        do: Model.put(socket, :world_id, event.world_id),
+        else: socket
 
     if Helpers.consecutive?(event, last_entry.event) do
       updated_entry = %Entry{last_entry | count: last_entry.count + 1}

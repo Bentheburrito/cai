@@ -17,98 +17,117 @@ defmodule CAIWeb.EventFeed.Utils do
 
   require Logger
 
-  def link_character(maybe_character, opts \\ [])
+  attr(:character, :any, required: true)
+  # TODO: default 0 good for these IDs?
+  attr(:vehicle_id, :integer, default: 0)
+  attr(:loadout_id, :integer, default: 0)
+  attr(:team_id, :integer, default: 0)
+  attr(:possessive?, :boolean, default: false)
 
-  def link_character({:being_fetched, character_id}, opts) do
-    link_character(%Character{character_id: character_id, name_first: "Getting name...", faction_id: 0}, opts)
-  end
-
-  def link_character({:unavailable, character_id}, opts) when is_character_id(character_id) do
-    possessive? = Keyword.get(opts, :possessive?, false)
-
-    assigns = %{
-      character_id: character_id,
-      possessive: (possessive? && "'s") || "",
-      loadout_icon: loadout_icon(Keyword.get(opts, :loadout_id)),
-      vehicle_icon: vehicle_icon(Keyword.get(opts, :vehicle_id), "this character")
-    }
-
+  def link_character(%{character: {:being_fetched, _character_id}} = assigns) do
     ~H"""
-    <.link navigate={~p"/sessions/#{@character_id}"} class="rounded pl-1 pr-1 mr-1 bg-gray-800 hover:text-gray-400">
-      <%= @vehicle_icon %>
-      <%= @loadout_icon %> [Name Unavailable]<%= @possessive %>
+    <.link navigate={~p"/sessions/#{elem(@character, 1)}"} class="rounded pl-1 pr-1 mr-1 bg-gray-800 hover:text-gray-400">
+      <.vehicle_icon vehicle_id={@vehicle_id} character_name="[Loading...]" />
+      <.loadout_icon loadout_id={@loadout_id} /> Loading name...
     </.link>
     """
   end
 
-  def link_character({:unavailable, npc_id}, _opts) do
-    if npc_id == 0 do
-      ""
-    else
-      assigns = %{npc_id: npc_id}
+  def link_character(%{character: {:unavailable, 0}} = assigns), do: ~H"someone or something"
 
-      ~H"""
-      <span title={"NPC ID #{@npc_id}"}>a vehicle</span>
-      """
-    end
-  end
-
-  def link_character(%Character{name_first: name, character_id: id, faction_id: faction_id}, opts) do
-    assigns = %{
-      name: name,
-      id: id,
-      possessive: (Keyword.get(opts, :possessive?, false) && "'s") || "",
-      faction_classes: Utils.faction_css_classes(faction_id, Keyword.get(opts, :team_id)),
-      loadout_icon: loadout_icon(Keyword.get(opts, :loadout_id)),
-      vehicle_icon: vehicle_icon(Keyword.get(opts, :vehicle_id), name)
-    }
-
+  def link_character(%{character: {:unavailable, character_id}} = assigns) when is_character_id(character_id) do
     ~H"""
-    <.link navigate={~p"/sessions/#{@id}"} class={"rounded pl-1 pr-1 mr-1 #{@faction_classes}"}>
-      <%= @vehicle_icon %>
-      <%= @loadout_icon %>
-      <%= @name <> @possessive %>
+    <.link navigate={~p"/sessions/#{elem(@character, 1)}"} class="rounded pl-1 pr-1 mr-1 bg-gray-800 hover:text-gray-400">
+      <.vehicle_icon vehicle_id={@vehicle_id} character_name="[Name Unavailable]" />
+      <.loadout_icon loadout_id={@loadout_id} /> [Name Unavailable] <%= (@possessive? && "'s") || "" %>
     </.link>
     """
   end
 
-  def loadout_icon(loadout_id) do
-    class_name = CAI.loadouts()[loadout_id][:class_name]
-
-    icon_url =
-      case class_name do
-        # 14985
-        "Infiltrator" -> PS2.API.get_image_url("/files/ps2/images/static/204.png")
-        # 14986
-        "Light Assault" -> PS2.API.get_image_url("/files/ps2/images/static/62.png")
-        # 14988
-        "Medic" -> PS2.API.get_image_url("/files/ps2/images/static/65.png")
-        # 14983
-        "Engineer" -> PS2.API.get_image_url("/files/ps2/images/static/201.png")
-        # 14984
-        "Heavy Assault" -> PS2.API.get_image_url("/files/ps2/images/static/59.png")
-        # 14987
-        "MAX" -> PS2.API.get_image_url("/files/ps2/images/static/207.png")
-        _ -> nil
-      end
-
-    assigns = %{icon_url: icon_url, class_name: class_name}
-
+  def link_character(%{character: {:unavailable, _}} = assigns) do
     ~H"""
-    <img :if={@icon_url} src={@icon_url} alt={@class_name} title={@class_name} class="inline object-contain h-4" />
+    <span title={"NPC ID #{elem(@character, 1)}"}>a vehicle</span>
     """
   end
 
-  def vehicle_icon(vehicle_id, character_name) do
-    vehicle = CAI.get_vehicle(vehicle_id)
-
-    assigns = %{
-      icon_url: vehicle["logo_path"],
-      title_text: "#{character_name} was in a #{vehicle["name"]} during this event"
-    }
-
+  def link_character(%{character: %Character{}} = assigns) do
     ~H"""
-    <img :if={@icon_url} src={@icon_url} alt={@title_text} title={@title_text} class="inline object-contain h-4" />
+    <.link
+      navigate={~p"/sessions/#{@character.character_id}"}
+      class={"rounded pl-1 pr-1 mr-1 #{Utils.faction_css_classes(@character.faction_id, @team_id)}"}
+    >
+      <.vehicle_icon vehicle_id={@vehicle_id} character_name={@character.name_first} />
+      <.loadout_icon loadout_id={@loadout_id} />
+      <%= "#{@character.name_first}#{(@possessive? && "'s") || ""}" %>
+    </.link>
+    """
+  end
+
+  attr(:loadout_id, :integer, required: true)
+
+  def loadout_icon(assigns) do
+    ~H"""
+    <%= case CAI.loadouts()[@loadout_id][:class_name] do %>
+      <% "Infiltrator" = class_name -> %>
+        <img
+          src={PS2.API.get_image_url("/files/ps2/images/static/204.png")}
+          alt={class_name}
+          title={class_name}
+          class="inline object-contain h-4"
+        />
+      <% "Light Assault" = class_name -> %>
+        <img
+          src={PS2.API.get_image_url("/files/ps2/images/static/62.png")}
+          alt={class_name}
+          title={class_name}
+          class="inline object-contain h-4"
+        />
+      <% "Medic" = class_name -> %>
+        <img
+          src={PS2.API.get_image_url("/files/ps2/images/static/65.png")}
+          alt={class_name}
+          title={class_name}
+          class="inline object-contain h-4"
+        />
+      <% "Engineer" = class_name -> %>
+        <img
+          src={PS2.API.get_image_url("/files/ps2/images/static/201.png")}
+          alt={class_name}
+          title={class_name}
+          class="inline object-contain h-4"
+        />
+      <% "Heavy Assault" = class_name -> %>
+        <img
+          src={PS2.API.get_image_url("/files/ps2/images/static/59.png")}
+          alt={class_name}
+          title={class_name}
+          class="inline object-contain h-4"
+        />
+      <% "MAX" = class_name -> %>
+        <img
+          src={PS2.API.get_image_url("/files/ps2/images/static/207.png")}
+          alt={class_name}
+          title={class_name}
+          class="inline object-contain h-4"
+        />
+      <% _ -> %>
+        <%= nil %>
+    <% end %>
+    """
+  end
+
+  attr(:vehicle_id, :integer, required: true)
+  attr(:character_name, :string, required: true)
+
+  def vehicle_icon(assigns) do
+    ~H"""
+    <img
+      :if={CAI.get_vehicle(@vehicle_id)["logo_path"]}
+      src={CAI.get_vehicle(@vehicle_id)["logo_path"]}
+      alt={"#{@character_name} was in a #{CAI.get_vehicle(@vehicle_id)["name"]} during this event"}
+      title={"#{@character_name} was in a #{CAI.get_vehicle(@vehicle_id)["name"]} during this event"}
+      class="inline object-contain h-4"
+    />
     """
   end
 

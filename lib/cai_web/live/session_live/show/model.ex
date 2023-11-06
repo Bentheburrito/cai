@@ -20,6 +20,7 @@ defmodule CAIWeb.SessionLive.Show.Model do
             pending_groups: %{},
             pending_queries: %{},
             remaining_events: [],
+            world_id: nil,
             login: nil,
             logout: nil
 
