@@ -18,7 +18,6 @@ defmodule CAIWeb.EventFeed.Utils do
   require Logger
 
   attr(:character, :any, required: true)
-  # TODO: default 0 good for these IDs?
   attr(:vehicle_id, :integer, default: 0)
   attr(:loadout_id, :integer, default: 0)
   attr(:team_id, :integer, default: 0)

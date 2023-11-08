@@ -42,12 +42,13 @@ defmodule CAIWeb.SessionLive.Helpers do
     handle_bonus_event(event, socket)
   end
 
-  # facility control bonus event
+  # facility control bonus event (only for the current world)
   def handle_ess_event(%FacilityControl{world_id: world_id} = event, socket)
       when world_id == socket.assigns.model.world_id do
     handle_bonus_event(event, socket)
   end
 
+  # ignore facility control events not for the current world
   def handle_ess_event(%FacilityControl{}, socket) do
     {:noreply, socket}
   end
