@@ -40,7 +40,7 @@ defmodule CAI.ESS.Helpers do
 
   Checks the DB with `Repo.exists?/1`
   """
-  @spec online?(Characters.character_id(), [{integer(), integer()}] | (event :: map())) :: boolean()
+  @spec online?(Characters.character_id(), [{integer(), integer()}]) :: boolean()
   def online?(character_id, timestamps) do
     # first element of timestamps list, 2nd element of the tuple is the logout timestamp
     latest_timestamp = get_in(timestamps, [Access.at(0), Access.elem(1)]) || 0
@@ -60,9 +60,11 @@ defmodule CAI.ESS.Helpers do
 
   Does not require a trip to the DB.
   """
+  @spec online?(event :: map() | nil) :: boolean()
   def online?(last_event) do
     case last_event do
       %PlayerLogout{} -> false
+      nil -> false
       %{timestamp: timestamp} -> timestamp > :os.system_time(:second) - Characters.Session.session_timeout_mins() * 60
     end
   end

@@ -91,6 +91,8 @@ defmodule CAIWeb.SessionLive.Entry do
     do_map([new(e, character, other)], init_events, character_map)
   end
 
+  defp do_map([], _character_map), do: []
+
   # exit condition (no remaining events)
   defp do_map(mapped, [], _character_map), do: mapped
 

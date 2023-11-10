@@ -7,13 +7,12 @@
     <.character_header character={@model.character} />
   </div>
 
-  <% {login, logout} = @model.timestamps || {0, 0} %>
   <div :if={@model.character} class="flex flex-col justify-between">
     <h3 class="m-2">
-      <%= if logout != :offline do %>
-        Session from <.timestamp id="session-login" unix_timestamp={login} class="font-bold" /> to
-        <.timestamp id="session-logout" unix_timestamp={logout} class="font-bold" />
-        <br /> Lasted <span class="font-bold"><%= format_duration(login, logout) %></span>
+      <%= if @model.logout != :offline do %>
+        Session from <.timestamp id="session-login" unix_timestamp={@model.login} class="font-bold" /> to
+        <.timestamp id="session-logout" unix_timestamp={@model.logout} class="font-bold" />
+        <br /> Lasted <span class="font-bold"><%= format_duration(@model.login, @model.logout) %></span>
       <% else %>
         <%= @model.character.name_first %> is offline.
       <% end %>
@@ -78,8 +77,6 @@
   </div>
 </div>
 
-<% duration_mins = if logout != :offline, do: Float.round((logout - login) / 60, 2), else: 0 %>
-
 <div :if={@model.aggregates}>
   <h3 class="m-2">
     Aggregate Stats
@@ -123,15 +120,15 @@
         <td class="p-1 pl-2 border-r" title="Kills/Minute">KPM</td>
         <td
           class="p-1 pl-2"
-          title={"# total kills / minutes played => #{@model.aggregates.kill_count} / #{duration_mins}"}
+          title={"# total kills / minutes played => #{@model.aggregates.kill_count} / #{@model.duration_mins}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.kill_count, duration_mins), 2) %>
+          <%= Float.round(safe_divide(@model.aggregates.kill_count, @model.duration_mins), 2) %>
         </td>
         <td
           class="p-1 pl-2"
-          title={"# IvI kills / minutes played => #{@model.aggregates.kill_ivi_count} / #{duration_mins}"}
+          title={"# IvI kills / minutes played => #{@model.aggregates.kill_ivi_count} / #{@model.duration_mins}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.kill_ivi_count, duration_mins), 2) %>
+          <%= Float.round(safe_divide(@model.aggregates.kill_ivi_count, @model.duration_mins), 2) %>
         </td>
       </tr>
       <tr>
@@ -181,15 +178,15 @@
         <td class="p-1 pl-2 border-r" title="Vehicle Kills/Minute">KPM</td>
         <td
           class="p-1 pl-2"
-          title={"# total vehicle kills / minutes played => #{@model.aggregates.vehicle_kill_count} / #{duration_mins}"}
+          title={"# total vehicle kills / minutes played => #{@model.aggregates.vehicle_kill_count} / #{@model.duration_mins}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.vehicle_kill_count, duration_mins), 2) %>
+          <%= Float.round(safe_divide(@model.aggregates.vehicle_kill_count, @model.duration_mins), 2) %>
         </td>
         <td
           class="p-1 pl-2"
-          title={"# nanites destroyed / minutes played => #{@model.aggregates.nanites_destroyed} / #{duration_mins}"}
+          title={"# nanites destroyed / minutes played => #{@model.aggregates.nanites_destroyed} / #{@model.duration_mins}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.nanites_destroyed, duration_mins), 2) %>
+          <%= Float.round(safe_divide(@model.aggregates.nanites_destroyed, @model.duration_mins), 2) %>
         </td>
       </tr>
     </table>

@@ -1,10 +1,10 @@
 # Consolidation of Auraxian Information (CAI)
 
-## A Planetside 2 stat site.
+## A Planetside 2 session tracker
 
 ### https://planetside.isreally.fun
 
-CAI is a WIP stat site that aims to provide quick access to live game data. The website currently offers a character 
+CAI is a WIP session tracker that aims to provide quick access to live game data. The website currently offers a character 
 session tracker, and provides session history up to a certain point in time. (As of writing, data is recorded from July
 22, 2023 to the present).
 

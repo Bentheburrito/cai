@@ -5,11 +5,7 @@ defmodule CAIWeb.SessionLive.Show do
   import CAIWeb.Utils
   import CAIWeb.SessionLive.Helpers
 
-  alias CAI.ESS.{
-    GainExperience,
-    Helpers,
-    MetagameEvent
-  }
+  alias CAI.ESS.{GainExperience, Helpers, PlayerLogout}
 
   alias CAI.Characters
   alias CAI.Characters.Character
@@ -23,7 +19,7 @@ defmodule CAIWeb.SessionLive.Show do
   @prepend 0
   @append -1
   @events_limit 15
-  @time_update_interval 3000
+  @time_update_interval 1500
 
   ### MOUNT AND HANDLE_PARAMS ###
 
@@ -32,7 +28,7 @@ defmodule CAIWeb.SessionLive.Show do
     {
       :ok,
       socket
-      |> assign(:model, Model.new())
+      |> assign(:model, Model.new(0, 0))
       |> stream_configure(:events, dom_id: &CAIWeb.SessionLive.Helpers.event_to_dom_id/1)
     }
   end
@@ -60,7 +56,8 @@ defmodule CAIWeb.SessionLive.Show do
           loading_more?: true,
           page_title: "#{character.name_first}'s Previous Session",
           remaining_events: remaining_events,
-          timestamps: {login, logout}
+          login: login,
+          logout: logout
         )
       }
     else
@@ -138,7 +135,7 @@ defmodule CAIWeb.SessionLive.Show do
             Map.new(Session.aggregate_fields(), &{&1, 0})
         end
 
-      timestamps =
+      {login, logout} =
         case {online?, timestamps} do
           {true, [{login, logout}]} -> {login, logout}
           _ -> {:os.system_time(:second), :offline}
@@ -156,7 +153,8 @@ defmodule CAIWeb.SessionLive.Show do
           live?: true,
           page_title: "#{character.name_first}'s Session",
           pending_groups: %{},
-          timestamps: timestamps
+          login: login,
+          logout: logout
         )
       }
     end
@@ -275,7 +273,7 @@ defmodule CAIWeb.SessionLive.Show do
       :noreply,
       socket
       |> stream(:events, entries, at: @append, limit: new_events_limit)
-      |> Model.put(events_limit: new_events_limit, loading_more?: false)
+      |> Model.put(events_limit: new_events_limit, loading_more?: false, last_entry: List.first(entries))
     }
   end
 
@@ -283,11 +281,13 @@ defmodule CAIWeb.SessionLive.Show do
   @impl true
   def handle_info({:event, %Ecto.Changeset{} = event_cs}, socket) do
     event = Ecto.Changeset.apply_changes(event_cs)
-    %Model{aggregates: aggregates, character: %{character_id: character_id}} = socket.assigns.model
+    %Model{aggregates: aggregates, character: %{character_id: character_id}, logout: logout} = socket.assigns.model
 
     aggregates = Session.put_aggregate_event(event, aggregates, character_id)
 
-    socket = Model.put(socket, :aggregates, aggregates)
+    logout = if match?(%PlayerLogout{}, event), do: :offline, else: logout
+
+    socket = Model.put(socket, aggregates: aggregates, logout: logout)
     socket = Blurbs.maybe_push_blurb(event, socket)
 
     handle_ess_event(event, socket)
@@ -330,18 +330,23 @@ defmodule CAIWeb.SessionLive.Show do
   # Live Session - Update the `logout` time every few seconds, unless the character is no longer online.
   @impl true
   def handle_info(:time_update, socket) do
-    last_entry =
-      case {socket.assigns.model.last_entry, socket.assigns.model.timestamps} do
-        {%Entry{} = last_entry, _} -> last_entry
-        {_, {_login, :offline}} -> Entry.new(%MetagameEvent{timestamp: 0}, %{})
-        {_, {_login, logout}} -> Entry.new(%MetagameEvent{timestamp: logout}, %{})
-        {_, nil} -> Entry.new(%MetagameEvent{timestamp: :os.system_time(:second)}, %{})
+    last_entry = socket.assigns.model.last_entry
+
+    last_event =
+      if is_nil(last_entry) do
+        nil
+      else
+        last_entry.event
       end
 
-    if Helpers.online?(last_entry.event) do
-      {login, _logout} = socket.assigns.model.timestamps || {0, 0}
+    if Helpers.online?(last_event) do
+      login = socket.assigns.model.login
+      logout = :os.system_time(:second)
+
+      duration_mins = if logout != :offline, do: Float.round((logout - login) / 60, 2), else: 0
+
       Process.send_after(self(), :time_update, @time_update_interval)
-      {:noreply, Model.put(socket, :timestamps, {login, :os.system_time(:second)})}
+      {:noreply, Model.put(socket, login: login, logout: logout, duration_mins: duration_mins)}
     else
       {:noreply, socket}
     end
