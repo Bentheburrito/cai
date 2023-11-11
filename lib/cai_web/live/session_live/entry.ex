@@ -48,9 +48,16 @@ defmodule CAIWeb.SessionLive.Entry do
       acc ->
         # If we didn't find a primary event associated with these bonuses, just put the bonuses back as regular entries.
         if is_nil(e) do
-          {character, other} = map_ids_to_characters(List.first(bonuses), character_map)
+          first_bonus = List.first(bonuses)
 
-          Enum.map(bonuses, &new(&1, character, other)) ++ acc
+          # Exclude FacilityControl events though - these can easily spam the event log.
+          if match?(%FacilityControl{}, first_bonus) do
+            acc
+          else
+            {character, other} = map_ids_to_characters(first_bonus, character_map)
+
+            Enum.map(bonuses, &new(&1, character, other)) ++ acc
+          end
         else
           {character, other} = map_ids_to_characters(e, character_map)
 

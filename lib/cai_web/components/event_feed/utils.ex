@@ -12,10 +12,27 @@ defmodule CAIWeb.EventFeed.Utils do
   import CAI.Guards, only: [is_character_id: 1]
 
   alias CAI.Characters.Character
+  alias CAI.ESS.FacilityControl
 
   alias CAIWeb.Utils
 
   require Logger
+
+  attr(:event, :map, required: true)
+  attr(:facility_info, :map, required: true)
+
+  def facility_control(%{event: %FacilityControl{new_faction_id: f_id, old_faction_id: f_id}} = assigns) do
+    ~H"""
+    <%= @facility_info["facility_name"] %> was defended by the <%= CAI.factions()[@event.new_faction_id].alias %>
+    """
+  end
+
+  def facility_control(assigns) do
+    ~H"""
+    <%= @facility_info["facility_name"] %> was captured by the
+    <%= CAI.factions()[@event.new_faction_id].alias %> from the <%= CAI.factions()[@event.old_faction_id].alias %>
+    """
+  end
 
   attr(:character, :any, required: true)
   attr(:vehicle_id, :integer, default: 0)

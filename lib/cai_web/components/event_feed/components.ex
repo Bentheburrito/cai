@@ -100,7 +100,7 @@ defmodule CAIWeb.EventFeed.Components do
          %{event: %VehicleDestroy{character_id: character_id, attacker_character_id: character_id}} = assigns
        ) do
     ~H"""
-    <.link_character character={@character} loadout_id={@event.attacker_loadout_id} team_id={@event.team_id} />
+    <.link_character character={@character} loadout_id={@event.attacker_loadout_id} team_id={@event.attacker_team_id} />
     destroyed their <%= CAI.get_vehicle(@event.vehicle_id)["name"] %> with
     <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
     """
@@ -229,6 +229,10 @@ defmodule CAIWeb.EventFeed.Components do
     """
   end
 
+  defp entry_content(%{event: %FacilityControl{}} = assigns) do
+    ~H"<.facility_control event={@event} facility_info={CAI.get_facility(@event.facility_id)} />"
+  end
+
   defp entry_content(%{event: %PlayerLogin{}} = assigns), do: ~H"<.link_character character={@character} /> logged in"
 
   defp entry_content(%{event: %PlayerLogout{}} = assigns), do: ~H"<.link_character character={@character} /> logged out"
@@ -252,7 +256,7 @@ defmodule CAIWeb.EventFeed.Components do
 
   defp render_bonus(%{event: %FacilityControl{}} = assigns) do
     ~H"""
-    <%= if Map.get(@event, :outfit_id) == @event.outfit_id do %>
+    <%= if not is_nil(@character.outfit) and Map.get(@character.outfit, :outfit_id) == @event.outfit_id do %>
       <span :if={@character.outfit}>for their outfit, <%= Outfit.alias_or_name(@character.outfit) %></span>
     <% else %>
       <span :for={{:ok, outfit} <- [CAI.Characters.fetch_outfit(@event.outfit_id)]}>
