@@ -4,6 +4,7 @@ defmodule CAIWeb.SessionLive.Show do
   import CAIWeb.EventFeed
   import CAIWeb.Utils
   import CAIWeb.SessionLive.Helpers
+  import Phoenix.Component, only: []
 
   alias CAI.ESS.{GainExperience, Helpers, PlayerLogout}
 
@@ -28,7 +29,7 @@ defmodule CAIWeb.SessionLive.Show do
     {
       :ok,
       socket
-      |> assign(:model, Model.new(0, 0))
+      |> Model.assign_new(0, 0)
       |> stream_configure(:events, dom_id: &CAIWeb.SessionLive.Helpers.event_to_dom_id/1)
     }
   end

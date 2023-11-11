@@ -53,6 +53,15 @@ defmodule CAIWeb.SessionLive.Blurbs do
     []
   end
 
+  @type t() :: %__MODULE__{
+          killing_spree_count: integer(),
+          last_kill_timestamp: integer(),
+          voicepack: String.t(),
+          track_queue: [String.t()],
+          playing?: boolean(),
+          volume: integer()
+        }
+
   defstruct killing_spree_count: 0,
             last_kill_timestamp: 0,
             voicepack: "crashmore",
