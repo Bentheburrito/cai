@@ -7,6 +7,7 @@ defmodule CAIWeb.SessionLive.Show.Model do
 
   alias CAI.Characters.{Character, Session}
   alias CAIWeb.SessionLive.Blurbs
+  alias CAIWeb.SessionLive.Entry
 
   defmodel do
     field :aggregates, map(), default: Map.new(Session.aggregate_fields(), &{&1, 0})
@@ -14,7 +15,7 @@ defmodule CAIWeb.SessionLive.Show.Model do
     field :character, Character.t()
     field :duration_mins, integer(), default: 0
     field :events_limit, integer(), default: 15
-    field :last_entry, CAIWeb.SessionLive.Entry.t()
+    field :last_entry, Entry.t()
     field :live?, boolean(), default: false
     field :loading_more?, boolean(), default: false
     field :page_title, String.t(), default: "Character Session"
