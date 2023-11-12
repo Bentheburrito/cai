@@ -72,12 +72,23 @@ defmodule CAIWeb.SessionLive.Helpers do
         |> Model.put(:last_entry, updated_entry)
       }
     else
-      character = socket.assigns.model.character
-      other_status = Helpers.get_other_character(character.character_id, event, &Characters.fetch_later/1)
-      entry = Entry.new(event, character, other_status)
+      # ugh.......please clean this up after reworking the async character fetching mechanism.....
+      %{character_id: character_id} = character = socket.assigns.model.character
+
+      entry =
+        case event do
+          %{character_id: ^character_id} ->
+            other_status = Helpers.get_other_character(character.character_id, event, &Characters.fetch_later/1)
+            Entry.new(event, character, other_status)
+
+          _ ->
+            other = Helpers.get_other_character(character.character_id, event)
+
+            Entry.new(event, other, character)
+        end
 
       socket =
-        case other_status do
+        case entry.other do
           {:being_fetched, other_id} ->
             Model.update(
               socket,
