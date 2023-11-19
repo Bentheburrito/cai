@@ -41,7 +41,7 @@ defmodule CAIWeb.SessionLive do
   def handle_event("validate", %{"character-ref" => ref}, socket) do
     ref_errors = validate(ref)
 
-    {:noreply, socket |> assign(:ref, ref) |> assign(:ref_errors, ref_errors)}
+    {:noreply, socket |> clear_flash() |> assign(:ref, ref) |> assign(:ref_errors, ref_errors)}
   end
 
   # if the LV mounts, and the user just hits enter, put error
