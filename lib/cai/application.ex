@@ -39,6 +39,10 @@ defmodule CAI.Application do
       Supervisor.child_spec({Cachex, name: facilities()}, id: facilities()),
       Supervisor.child_spec({Cachex, name: outfits()}, id: outfits()),
       Supervisor.child_spec({Cachex, static_data_opts}, id: static_data()),
+      # Start the Census gateway TaskSupervisor
+      {Task.Supervisor, name: CAI.Characters.Fetcher.TaskSupervisor},
+      # Start the Census gateway gen_statem
+      CAI.Characters.Fetcher,
       # Start the ESS Client
       CAI.ESS.Client,
       # Start the ESS Socket
