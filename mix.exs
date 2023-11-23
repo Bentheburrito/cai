@@ -4,7 +4,7 @@ defmodule CAI.MixProject do
   def project do
     [
       app: :cai,
-      version: "0.1.16",
+      version: "0.1.17",
       elixir: "~> 1.14",
       elixirc_paths: elixirc_paths(Mix.env()),
       start_permanent: Mix.env() == :prod,
@@ -53,7 +53,8 @@ defmodule CAI.MixProject do
       {:dotenv_parser, "~> 1.2"},
       {:cachex, "~> 3.6"},
       {:credo, "~> 1.6", only: [:dev, :test, :github], runtime: false},
-      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false}
+      {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
+      {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false}
     ]
   end
 

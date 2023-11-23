@@ -68,19 +68,19 @@ defmodule CAI do
         name: "Vanu Sovereignty",
         alias: "VS",
         color: 0xB035F2,
-        image: "https://bit.ly/2RCsHXs"
+        image: "/images/VS.png"
       },
       2 => %{
         name: "New Conglomerate",
         alias: "NC",
         color: 0x2A94F7,
-        image: "https://bit.ly/2AOZJJB"
+        image: "/images/NC.png"
       },
       3 => %{
         name: "Terran Republic",
         alias: "TR",
         color: 0xE52D2D,
-        image: "https://bit.ly/2Mm6wij"
+        image: "/images/TR.png"
       },
       4 => %{
         name: "Nanite Systems",
