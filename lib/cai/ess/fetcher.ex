@@ -53,7 +53,8 @@ defmodule CAI.Characters.Fetcher do
 
   @behaviour :gen_statem
 
-  # awaiting is a map, where the keys are `Query.t()`s, and the values are a list of the requesting PIDs.
+  # awaiting is a map that looks like %{collection_name: %{identifier: [list_of_PIDs]}}
+  # e.g. %{character: %{5428713425545165425 => [#PID<0.106.0>]}}
   @enforce_keys [:self]
   defstruct awaiting: %{}, self: nil
 
@@ -72,6 +73,7 @@ defmodule CAI.Characters.Fetcher do
 
   @spec fetch(Query.t()) :: query_result()
   def fetch(%Query{} = query) do
+
   end
 
   def start_link(opts) do
