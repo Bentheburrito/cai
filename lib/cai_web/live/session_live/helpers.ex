@@ -75,25 +75,21 @@ defmodule CAIWeb.SessionLive.Helpers do
       # ugh.......please clean this up after reworking the async character fetching mechanism.....
       %{character_id: character_id} = character = socket.assigns.model.character
 
+      other = Helpers.get_other_character(character_id, event, &Characters.fetch_async/1)
+
       entry =
         case event do
-          %{character_id: ^character_id} ->
-            other_status = Helpers.get_other_character(character.character_id, event, &Characters.fetch_later/1)
-            Entry.new(event, character, other_status)
-
-          _ ->
-            other = Helpers.get_other_character(character.character_id, event)
-
-            Entry.new(event, other, character)
+          %{character_id: ^character_id} -> Entry.new(event, character, other)
+          _ -> Entry.new(event, other, character)
         end
 
       socket =
-        case entry.other do
-          {:being_fetched, other_id} ->
+        case other do
+          {:being_fetched, _other_id, query} ->
             Model.update(
               socket,
               :pending_queries,
-              &Map.update(&1, other_id, [entry], fn entries -> [entry | entries] end)
+              &Map.update(&1, query, [entry], fn entries -> [entry | entries] end)
             )
 
           _ ->

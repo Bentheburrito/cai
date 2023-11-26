@@ -6,6 +6,8 @@ defmodule CAI.Application do
   import CAI.Cachex
   import Cachex.Spec
 
+  alias CAI.Characters
+
   @impl true
   def start(_type, _args) do
     subscriptions = CAI.ess_subscriptions()
@@ -24,6 +26,15 @@ defmodule CAI.Application do
       ]
     ]
 
+    census_transformers = %{
+      "character" => [
+        &Characters.cast_characters/1,
+        &Characters.put_characters_in_caches/1,
+        &Characters.unwrap_if_one/1
+      ],
+      "outfit" => [&Characters.cast_outfits/1, &Characters.put_outfits_in_cache/1, &Characters.unwrap_if_one/1]
+    }
+
     children = [
       # Start the Telemetry supervisor
       CAIWeb.Telemetry,
@@ -40,9 +51,9 @@ defmodule CAI.Application do
       Supervisor.child_spec({Cachex, name: outfits()}, id: outfits()),
       Supervisor.child_spec({Cachex, static_data_opts}, id: static_data()),
       # Start the Census gateway TaskSupervisor
-      {Task.Supervisor, name: CAI.Characters.Fetcher.TaskSupervisor},
+      {Task.Supervisor, name: CAI.Census.TaskSupervisor},
       # Start the Census gateway gen_statem
-      CAI.Characters.Fetcher,
+      {CAI.Census, transformers: census_transformers},
       # Start the ESS Client
       CAI.ESS.Client,
       # Start the ESS Socket

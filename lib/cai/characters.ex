@@ -12,8 +12,8 @@ defmodule CAI.Characters do
   alias CAI.Characters.{Character, Outfit, Session}
   alias CAI.Repo
   alias Ecto.Changeset
-  alias PS2.API, as: Census
-  alias PS2.API.{Query, QueryResult}
+  alias CAI.Census
+  alias PS2.API.Query
 
   alias CAI.ESS.{
     Death,
@@ -31,11 +31,11 @@ defmodule CAI.Characters do
   @type character_id :: integer()
   @type character_name :: String.t()
   @type character_reference :: character_name | character_id
+  @type character_fetch_result :: {:ok, Character.t()} | :not_found | :error
+  @type character_async_result :: character_fetch_result() | {:fetching, Query.t()}
 
   @cache_ttl_ms 12 * 60 * 60 * 1000
   @put_opts [ttl: @cache_ttl_ms]
-  @httpoison_timeout_ms 12 * 1000
-  @default_census_attempts 3
   @query_base Query.new(collection: "character")
               |> resolve([
                 "outfit(alias,id,name,leader_character_id,time_created_date)",
@@ -60,18 +60,38 @@ defmodule CAI.Characters do
   @doc """
   Get a `Character` by their ID or name.
 
-  The function first checks `characters()`, and falls back to a Census query on cache miss. The cache is updated
-  on miss. Cache entries last for #{@cache_ttl_ms} milliseconds.
+  The function first checks the `characters()` cache, and falls back to a Census query on cache miss. The cache is
+  updated on miss. Cache entries last for #{@cache_ttl_ms} milliseconds.
 
   Returns an ok tuple with the character struct on success. If the cache misses and Census returns no results,
   `:not_found` is returned. `:error` is returned in all other cases, and any Census errors are logged.
 
   TODO: return cached_at on cache hit, and remaining TTL?
   """
-  @spec fetch(character_reference()) :: {:ok, Character.t()} | :not_found | :error
-  def fetch(0), do: :not_found
+  @spec fetch(character_reference()) :: character_fetch_result()
+  def fetch(character_reference) do
+    do_fetch(character_reference, &Census.fetch/1)
+  end
 
-  def fetch(name) when is_binary(name) do
+  @doc """
+  Similar to `fetch/1`, but immediately returns `{:fetching, Query.t()}` and later sends the caller a message
+  with the result of the query.
+
+  The message takes the form of `{:fetch, character_reference, query_result}`, where
+  `character_reference` is the referenced passed to this function, and `query_result`
+  is one of `{:ok, Character.t()} | :not_found | :error`
+  """
+  @spec fetch_async(character_reference()) :: character_async_result()
+  def fetch_async(character_reference) do
+    do_fetch(character_reference, fn query ->
+      :ok = Census.fetch_async(query)
+      {:fetching, query}
+    end)
+  end
+
+  defp do_fetch(0, _fallback_fn), do: :not_found
+
+  defp do_fetch(name, fallback_fn) when is_binary(name) do
     if String.length(name) < 3 do
       :error
     else
@@ -79,8 +99,9 @@ defmodule CAI.Characters do
 
       case Cachex.get(character_names(), name_lower) do
         {:ok, nil} ->
-          query = term(@query_base, "name.first_lower", name_lower)
-          fetch_by_query(query, &put_character_in_caches/1)
+          @query_base
+          |> term("name.first_lower", name_lower)
+          |> fallback_fn.()
 
         {:ok, character_id} ->
           fetch(character_id)
@@ -88,14 +109,15 @@ defmodule CAI.Characters do
     end
   end
 
-  def fetch(character_id) when is_character_id(character_id) do
+  defp do_fetch(character_id, fallback_fn) when is_character_id(character_id) do
     with {:ok, %Character{} = char} <- Cachex.get(characters(), character_id),
          {:ok, true} <- Cachex.put(character_names(), char.name_first_lower, character_id, @put_opts) do
       {:ok, char}
     else
       {:ok, nil} ->
-        query = term(@query_base, "character_id", character_id)
-        fetch_by_query(query, &put_character_in_caches/1)
+        @query_base
+        |> term("character_id", character_id)
+        |> fallback_fn.()
 
       {:error, _} ->
         Logger.error("Could not access cache CAI.Cachex.characters()")
@@ -103,82 +125,64 @@ defmodule CAI.Characters do
     end
   end
 
-  def fetch(_non_character_id) do
+  defp do_fetch(_non_character_id, _fallback_fn) do
     :error
   end
 
-  @doc """
-  Similar to `fetch/1`, but immediately returns `:ok` and sends the caller a message
-  with the result of the query.
+  # TODO: make behaviour for these transformers
+  def cast_characters(data) do
+    for params <- data do
+      %Character{}
+      |> Character.changeset(params)
+      |> Changeset.apply_action(:update)
+      |> case do
+        {:ok, character} ->
+          character
 
-  The message takes the form of `{:fetched, character_reference, query_result}`, where
-  `character_reference` is the referenced passed to this function, and `query_result`
-  is one of `{:ok, Character.t()} | :not_found | :error`
-  """
-  @spec fetch_later(character_reference()) :: :ok
-  def fetch_later(character_reference) do
-    caller = self()
+        {:error, %Changeset{} = changeset} ->
+          Logger.error(
+            "Could not parse census character response into a Character struct: #{inspect(changeset.errors)}"
+          )
 
-    Task.start_link(fn ->
-      query_result = fetch(character_reference)
-      send(caller, {:fetched, character_reference, query_result})
-    end)
-
-    :ok
-  end
-
-  @doc """
-  Runs the given Census query, optionally transforming the result with the `map_to/1` parameter.
-
-  Defaults to a maximum of #{@default_census_attempts} attempts. Returns the same as `fetch/1`.
-  """
-  @spec fetch_by_query(Query.t(), (any() -> any()), integer()) :: {:ok, Character.t()} | :not_found | :error
-  def fetch_by_query(query, map_to \\ & &1, remaining_tries \\ @default_census_attempts)
-
-  def fetch_by_query(_query, _map_to, remaining_tries) when remaining_tries == 0 do
-    Logger.error("fetch_by_query: remaining_tries == 0, returning :error")
-    :error
-  end
-
-  def fetch_by_query(query, map_to, remaining_tries) do
-    case Census.query_one(query, CAI.sid()) do
-      {:ok, %QueryResult{data: data, returned: returned}} when returned > 0 ->
-        {:ok, map_to.(data)}
-
-      {:ok, %QueryResult{returned: 0}} ->
-        :not_found
-
-      {:error, e} ->
-        Logger.warning("fetch_by_query returned error (#{remaining_tries - 1} attempts remain): #{inspect(e)}")
-
-        fetch_by_query(query, map_to, remaining_tries - 1)
+          changeset
+      end
     end
   end
 
-  defp put_character_in_caches(data) do
-    case %Character{} |> Character.changeset(data) |> Changeset.apply_action(:update) do
-      {:ok, char} ->
-        Cachex.put(characters(), char.character_id, char, @put_opts)
-        Cachex.put(character_names(), char.name_first_lower, char.character_id, @put_opts)
-        char
-
-      {:error, %Changeset{} = changeset} ->
-        Logger.error("Could not parse census character response into a Character struct: #{inspect(changeset.errors)}")
-
-        :error
+  def put_characters_in_caches(characters) do
+    for %Character{} = character <- characters do
+      Cachex.put(characters(), character.character_id, character, @put_opts)
+      Cachex.put(character_names(), character.name_first_lower, character.character_id, @put_opts)
+      character
     end
   end
 
-  defp put_outfit_in_cache(data) do
-    case %Outfit{} |> Outfit.changeset(data) |> Changeset.apply_action(:update) do
-      {:ok, outfit} ->
-        Cachex.put(outfits(), outfit.outfit_id, outfit, ttl: round(@cache_ttl_ms / 2))
-        outfit
+  def unwrap_if_one([character]), do: character
+  def unwrap_if_one(non_one_list), do: non_one_list
 
-      {:error, %Changeset{} = changeset} ->
-        Logger.error("Could not parse census outfit response into an Outfit struct: #{inspect(changeset.errors)}")
+  # def put_characters_in_caches(not_ok_tuple), do: not_ok_tuple
 
-        :error
+  def cast_outfits(data) do
+    for params <- data do
+      %Outfit{}
+      |> Outfit.changeset(params)
+      |> Changeset.apply_action(:update)
+      |> case do
+        {:ok, outfit} ->
+          outfit
+
+        {:error, %Changeset{} = changeset} ->
+          Logger.error("Could not parse census outfit response into an Outfit struct: #{inspect(changeset.errors)}")
+
+          changeset
+      end
+    end
+  end
+
+  def put_outfits_in_cache(outfits) do
+    for %Outfit{} = outfit <- outfits do
+      Cachex.put(outfits(), outfit.outfit_id, outfit, ttl: round(@cache_ttl_ms / 2))
+      outfit
     end
   end
 
@@ -190,7 +194,7 @@ defmodule CAI.Characters do
 
   Non-character IDs in the given list are ignored.
   """
-  @spec get_many(Enum.t()) :: %{character_id() => Character.t() | :not_found | :error}
+  @spec get_many(Enum.t(character_id())) :: %{character_id() => Character.t() | :not_found | :error}
   def get_many(character_ids) do
     # Step 1: Check the cache for these IDs, keeping track of IDs that are not in the cache.
     for id when is_character_id(id) <- character_ids, reduce: {[], %{}} do
@@ -213,59 +217,18 @@ defmodule CAI.Characters do
         character_map
 
       {uncached_ids, character_map} ->
-        query = term(@query_base, "character_id", uncached_ids)
-        new_character_map = get_many_by_query(query)
+        {:ok, characters} =
+          @query_base
+          |> term("character_id", uncached_ids)
+          |> Census.fetch()
+
+        characters = List.wrap(characters)
+
+        new_character_map =
+          Map.new(characters, &{&1.character_id, &1})
+
         # Must merge this way, since map2 key values override map1's
         Map.merge(character_map, new_character_map)
-    end
-  end
-
-  @doc """
-  Runs the given multi-character Census query, updating caches and parsing the result into a map of `Character` structs
-  (see `get_many/1` above).
-
-  Defaults to a maximum of #{@default_census_attempts} attempts. Returns the same as `get_many/1`.
-  """
-  @spec get_many_by_query(Query.t()) :: %{character_id() => Character.t() | :not_found | :error}
-  def get_many_by_query(query, remaining_tries \\ @default_census_attempts)
-
-  def get_many_by_query(_query, remaining_tries) when remaining_tries == 0 do
-    Logger.error("remaining_tries == 0, returning %{}")
-    %{}
-  end
-
-  def get_many_by_query(query, remaining_tries) do
-    case Census.query(query, CAI.sid(), recv_timeout: @httpoison_timeout_ms) do
-      {:ok, %QueryResult{data: data, returned: returned}} when returned > 0 ->
-        Enum.reduce(data, %{}, &get_many_reducer/2)
-
-      {:ok, %QueryResult{returned: 0}} ->
-        %{}
-
-      {:error, e} ->
-        Logger.warning("get_many_by_query returned error (#{remaining_tries - 1} attempts remain): #{inspect(e)}")
-
-        get_many_by_query(query, remaining_tries - 1)
-    end
-  end
-
-  # Helper function that attempts to build a Character struct from a census response. Caches the Character upon success.
-  defp get_many_reducer(character_params, character_map) do
-    maybe_character =
-      %Character{}
-      |> Character.changeset(character_params)
-      |> Changeset.apply_action(:update)
-
-    case maybe_character do
-      {:ok, %Character{character_id: character_id} = character} ->
-        Cachex.put(characters(), character_id, character, @put_opts)
-        Cachex.put(character_names(), character.name_first_lower, character_id, @put_opts)
-        Map.put(character_map, character_id, character)
-
-      {:error, changeset} ->
-        Logger.error("Could not parse census character response into a Character struct: #{inspect(changeset.errors)}")
-
-        character_map
     end
   end
 
@@ -281,7 +244,7 @@ defmodule CAI.Characters do
         Query.new(collection: "outfit")
         |> term("outfit_id", outfit_id)
         |> lang("en")
-        |> fetch_by_query(&put_outfit_in_cache/1)
+        |> Census.fetch()
 
       {:error, _} ->
         Logger.error("Could not access CAI.Cachex.outfits()")
