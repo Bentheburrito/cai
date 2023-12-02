@@ -10,6 +10,8 @@ defmodule CAI.Application do
 
   @impl true
   def start(_type, _args) do
+    Logger.add_translator({CAI.StatemTranslator, :translate})
+
     subscriptions = CAI.ess_subscriptions()
 
     ess_opts = [

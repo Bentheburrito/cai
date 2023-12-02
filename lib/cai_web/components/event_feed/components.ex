@@ -256,7 +256,7 @@ defmodule CAIWeb.EventFeed.Components do
 
   defp render_bonus(%{event: %FacilityControl{}} = assigns) do
     ~H"""
-    <%= if not is_nil(@character.outfit) and Map.get(@character.outfit, :outfit_id) == @event.outfit_id do %>
+    <%= if is_map(@character) and is_map(@character.outfit) and Map.get(@character.outfit, :outfit_id) == @event.outfit_id do %>
       <span :if={@character.outfit}>for their outfit, <%= Outfit.alias_or_name(@character.outfit) %></span>
     <% else %>
       <span :for={{:ok, outfit} <- [CAI.Characters.fetch_outfit(@event.outfit_id)]}>

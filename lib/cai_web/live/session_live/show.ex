@@ -300,27 +300,55 @@ defmodule CAIWeb.SessionLive.Show do
     case Map.fetch(socket.assigns.model.pending_groups, pending_key) do
       {:ok, group} ->
         character = socket.assigns.model.character
+        pending_queries = socket.assigns.model.pending_queries
 
-        character_map =
-          with [%{character_id: _} | _] <- group.bonuses,
-               {_, char_id, other_id} = pending_key,
-               placeholder_event = %GainExperience{character_id: char_id, other_id: other_id},
-               %Character{} = other <- Helpers.get_other_character(character.character_id, placeholder_event) do
-            %{other.character_id => other}
-          else
-            {:unavailable, other_id} -> %{other_id => {:unavailable, other_id}}
-            _ -> %{}
-          end
-          |> Map.put(character.character_id, character)
+        with {_, char_id, other_id} <- pending_key,
+             placeholder_event <- %GainExperience{character_id: char_id, other_id: other_id} do
+          other_result =
+            Helpers.get_other_character(character.character_id, placeholder_event, &Characters.fetch_async/1)
 
-        entries = Entry.from_groups(%{pending_key => group}, [], character_map)
+          other_id =
+            case other_result do
+              %Character{character_id: character_id} -> character_id
+              {:unavailable, character_id} -> character_id
+              {:being_fetched, character_id, _} -> character_id
+              :noop -> raise "why are we getting noops. take this return value out!!"
+            end
 
-        {
-          :noreply,
-          socket
-          |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
-          |> stream(:events, entries, at: @prepend, limit: @events_limit)
-        }
+          character_map =
+            Map.put(%{other_id => other_result}, character.character_id, character)
+
+          entries = Entry.from_groups(%{pending_key => group}, [], character_map)
+
+          pending_queries =
+            case other_result do
+              {:being_fetched, _other_id, query} -> Map.update(pending_queries, query, entries, &(entries ++ &1))
+              _ -> pending_queries
+            end
+
+          {
+            :noreply,
+            socket
+            |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
+            |> Model.put(:pending_queries, pending_queries)
+            |> stream(:events, entries, at: @prepend, limit: @events_limit)
+          }
+        else
+          # non-character event
+          {_, _, _, _} ->
+            entries = Entry.from_groups(%{pending_key => group}, [], %{character.character_id => character})
+
+            {
+              :noreply,
+              socket
+              |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
+              |> stream(:events, entries, at: @prepend, limit: @events_limit)
+            }
+
+          _ ->
+            Logger.error("Received :build_entries message, but couldn't parse: #{inspect(pending_key)}")
+            {:noreply, socket}
+        end
 
       :error ->
         Logger.error("Received :build_entries message, but no group was found under #{inspect(pending_key)}")

@@ -1,42 +1,6 @@
 defmodule CAI.Census do
   @moduledoc """
   Dispatcher and ratelimiter for Census queries.
-
-  ##### thoughts
-
-  ## what am I actually trying to solve here?
-  - we retry 3 times before abandoning a request. During bursts of timeouts/service_unavailables,
-    these retries don't matter - they will all fail eventually and just waste time retrying.
-  - so, let's start simple - circuit-breaker state machine. We get X timeouts, buffer queries for Y seconds, then
-    reintroduce them 1:1. It'll be very possible to continuously stockpile requests in the queue/buffer, so an
-    internal timeout mechanism will likely be needed later.
-
-  let's also start moving away from Characters context. It's already 500+ lines. This module
-  is going to be responsible for servicing %Character{} requests, and maintaining the cache for those requests. That's
-  it.
-
-  ## How the fetcher will work
-
-  1. requests sent to gen_statem from `fetch` fn, which checks cache, returns struct on hit.
-  2. on miss, sends statem a message with the char ID or name and the calling PID.
-  3. statem will handle the message depending on its current state:
-  3a. if :opened, request immediately takes flight to the Census
-  3b. if :slowed, request goes to the buffer
-  3c. if :closed, request goes to the buffer
-  4. if the query does not take flight after a timeout, it's discarded and a message is sent to the caller to notify it
-  5. once the query takes flight and returns, the result is sent to the caller, the cache, and may affect change the
-     state in the following ways:
-  5a. if :opened and result was success, no state change
-  5b. if :opened and result was timeout, inc error count
-  5c. if :opened and result was error/service_unavailable, state change to :slowed
-  5d. if :slowed and result was success, inc success count
-  5e. if :slowed and result was timeout, inc error count
-  5f. if :slowed and result was error/service_unavailable, state change to :closed
-  5g. if :closed and result was success, inc success count
-  5h. if :closed and result was timeout, no state change
-  5i. if :closed and result was error/service_unavailable, no state change
-
-  !!! REQUESTS NEED METADATA TO INDICATE WHAT ATTEMPT #.
   """
 
   alias CAI.Census.TaskSupervisor
@@ -55,8 +19,7 @@ defmodule CAI.Census do
   defstruct pending: %{},
             failed: %{},
             fail_count: 0,
-            fetch_queue: :queue.new(),
-            pop_buffer_timer_ref: nil,
+            # open_into: nil,
             transformers: %{}
 
   # @type query_result :: {:ok, Character.t()} | :not_found | :error
@@ -66,21 +29,14 @@ defmodule CAI.Census do
   @closed_timeout_ms 6_000
   @fail_count_threshold 3
   @httpoison_timeout_ms 12 * 1000
-  @max_query_retries 2
-  @slowed_period_ms 1_000
+  @max_query_retries 5
+  @max_queries_in_flight 3
+  @slowed_period_ms 1_500
 
   ### API
 
-  # In the future, instead of taking a query, may consider storing  {collection, param, value} and constructing the
-  # query when needed, and distributing results based on the requested resource trio, instead of per-query (e.g. in some
-  # [albeit rare] cases, 2 different queries could partially be requesting the same resource, and so requesting the same
-  # resource twice could be avoided). Additionally, instead of taking a `from`, could use pubsub to distribute results?
   @spec fetch_async(Query.t()) :: :ok
   def fetch_async(query) do
-    # param = if param == :prefix_collection, do: "#{collection}_id", else: param
-
-    # :gen_statem.cast(__MODULE__, {:fetch, self(), collection, {reference_name, reference}, query})
-    # :gen_statem.cast(__MODULE__, {:fetch, collection, param, value})
     :gen_statem.cast(__MODULE__, {:fetch, self(), query})
   end
 
@@ -118,35 +74,21 @@ defmodule CAI.Census do
     {:ok, :opened, %__MODULE__{transformers: transformers}}
   end
 
-  # query request
-  def opened(:cast, {:fetch, from, query}, %__MODULE__{} = state) do
-    unless is_map_key(state.pending, query) do
-      fly(query, Map.get(state.transformers, query.collection, []))
-    end
+  def opened(:cast, {:fetch, from, query}, %__MODULE__{} = state), do: {:keep_state, handle_request(state, from, query)}
+  def opened(:info, {:fetch_complete, query, {:ok, _} = result}, state), do: handle_result(state, query, result)
+  def opened(:info, {:fetch_complete, query, :not_found}, state), do: handle_result(state, query, :not_found)
 
-    {:keep_state, put_pending(state, from, query)}
-  end
-
-  # successful query result
-  def opened(:info, {:fetch_complete, query, {:ok, _} = result}, state), do: forward_result(state, query, result)
-  def opened(:info, {:fetch_complete, query, :not_found}, state), do: forward_result(state, query, :not_found)
-
-  # timeout query result
   def opened(:info, {:fetch_complete, query, :timeout}, %__MODULE__{} = state) do
     fail_count = state.fail_count + 1
     state = %__MODULE__{state | fail_count: fail_count}
+    Logger.info("opened, got timeout")
 
     # if we just ran into a bunch of failures in a row, let's slow things down
     if fail_count >= @fail_count_threshold do
       Logger.info("fail_count met #{@fail_count_threshold}, transitioning to slowed")
 
-      fail_count = state.fail_count + 1
-      timer_ref = Process.send_after(self(), :pop_buffer, @slowed_period_ms)
-      state = %__MODULE__{state | fail_count: fail_count, pop_buffer_timer_ref: timer_ref}
-
       {:next_state, :slowed, retry_if_able(state, query, :timeout)}
     else
-      Logger.info("opened, got timeout")
       fly(query, Map.get(state.transformers, query.collection, []))
 
       {:keep_state, state}
@@ -158,17 +100,12 @@ defmodule CAI.Census do
     Logger.info("opened, got error, transitioning to slowed")
 
     fail_count = state.fail_count + 1
-    timer_ref = Process.send_after(self(), :pop_buffer, @slowed_period_ms)
 
-    state = %__MODULE__{state | fail_count: fail_count, pop_buffer_timer_ref: timer_ref}
+    state = %__MODULE__{state | fail_count: fail_count}
 
     # in the case of an error that's not a timeout, let's immediately transition to :slowed
     {:next_state, :slowed, retry_if_able(state, query, error)}
   end
-
-  # if we transition :slowed -> :opened and there are queries in the buffer, we want to continue to send those out
-  # while in :opened
-  def opened(:info, :pop_buffer, %__MODULE__{} = state), do: slowed(:info, :pop_buffer, state)
 
   # anything else doesn't make sense to receive in :opened state
   def opened(event_type, event_content, %__MODULE__{} = state) do
@@ -176,29 +113,17 @@ defmodule CAI.Census do
     {:keep_state, state}
   end
 
-  def slowed(:cast, {:fetch, from, query} = request, %__MODULE__{} = state) do
-    # if there is no timer ref, this is the first fetch req since transitioning to :slowed
-    if is_nil(state.pop_buffer_timer_ref) do
-      Logger.info("in slowed w/ no timer, flying and starting a timer...")
+  def slowed(:cast, {:fetch, from, query}, %__MODULE__{} = state) do
+    Logger.info("handling request in :slowed, transitioning to :closed for #{@slowed_period_ms}ms")
 
-      timer_ref = Process.send_after(self(), :pop_buffer, @slowed_period_ms)
-      state = %__MODULE__{state | pop_buffer_timer_ref: timer_ref}
+    state = handle_request(state, from, query)
 
-      unless is_map_key(state.pending, query) do
-        fly(query, Map.get(state.transformers, query.collection, []))
-      end
-
-      {:keep_state, put_pending(state, from, query)}
-    else
-      state = %__MODULE__{state | fetch_queue: :queue.in(request, state.fetch_queue)}
-
-      {:keep_state, put_pending(state, from, query)}
-    end
+    {:next_state, :closed, state, [{:state_timeout, @slowed_period_ms, :slowed}]}
   end
 
   # successful query
   def slowed(:info, {:fetch_complete, query, {:ok, _} = result}, %__MODULE__{} = state) do
-    {_, state} = forward_result(state, query, result)
+    {_, state} = handle_result(state, query, result)
 
     if state.fail_count == 0 do
       Logger.info("transitioning from slowed -> opened (reached 0 fail count)")
@@ -210,7 +135,7 @@ defmodule CAI.Census do
 
   # successful (but resource not found) query result
   def slowed(:info, {:fetch_complete, query, :not_found}, %__MODULE__{} = state) do
-    {_, state} = forward_result(state, query, :not_found)
+    {_, state} = handle_result(state, query, :not_found)
 
     if state.fail_count == 0 do
       Logger.info("transitioning from slowed -> opened (reached 0 fail count)")
@@ -226,11 +151,13 @@ defmodule CAI.Census do
     state = %__MODULE__{state | fail_count: fail_count}
 
     # if things are still bad after slowing down, stop requests for a while by transitioning to :closed
-    if fail_count >= @fail_count_threshold do
-      Process.cancel_timer(state.pop_buffer_timer_ref)
-      state = %__MODULE__{state | pop_buffer_timer_ref: nil}
+    if fail_count >= @fail_count_threshold + round(@fail_count_threshold / 2) do
+      Logger.info(
+        "fail_count exceeded #{@fail_count_threshold + round(@fail_count_threshold / 2)} == @fail_count_threshold + round(@fail_count_threshold / 2) in :slowed, going to :closed"
+      )
 
-      {:next_state, :closed, retry_if_able(state, query, :timeout), [{:state_timeout, @closed_timeout_ms, :slowed}]}
+      {:next_state, :closed, retry_if_able(state, query, :timeout),
+       [{:state_timeout, @closed_timeout_ms, {:fail_count, 1}}]}
     else
       {:keep_state, retry_if_able(state, query, :timeout)}
     end
@@ -238,28 +165,8 @@ defmodule CAI.Census do
 
   # errored query result
   def slowed(:info, {:fetch_complete, query, {:error, error}}, %__MODULE__{} = state) do
-    Process.cancel_timer(state.pop_buffer_timer_ref)
-    state = %__MODULE__{state | pop_buffer_timer_ref: nil}
-
     # in the case of an error that's not a timeout, let's immediately transition to :closed
     {:next_state, :closed, retry_if_able(state, query, error), [{:state_timeout, @closed_timeout_ms, :slowed}]}
-  end
-
-  def slowed(:info, :pop_buffer, %__MODULE__{} = state) do
-    case :queue.out(state.fetch_queue) do
-      {{:value, {:fetch, _from, query}}, queue} ->
-        Logger.info("getting next queued query in :slowed, flying next query")
-        timer_ref = Process.send_after(self(), :pop_buffer, @slowed_period_ms)
-        state = %__MODULE__{state | pop_buffer_timer_ref: timer_ref, fetch_queue: queue}
-
-        fly(query, Map.get(state.transformers, query.collection, []))
-
-        {:keep_state, state}
-
-      {:empty, _queue} ->
-        Logger.info("getting next queued query in :slowed, but it was empty")
-        {:keep_state, %__MODULE__{state | pop_buffer_timer_ref: nil}}
-    end
   end
 
   # anything else doesn't make sense to receive in :slowed state
@@ -268,21 +175,19 @@ defmodule CAI.Census do
     {:keep_state, state}
   end
 
-  # we've been :closed for a while, let's transition back to :slowed and try some queries again
-  def closed(:state_timeout, _old_state, %__MODULE__{} = state) do
-    # for now, let's be a bit optimistic and set fail_count = 1. This means it will
-    # take 1 successful :slowed query to get back into :opened.
-    {:next_state, :slowed, %__MODULE__{state | fail_count: 1}}
-  end
+  # COMMENTING OUT for now - now that we're using transitions to :closed as part of :slowed's logic of firing queries every 1500ms, we can't use this because it will never transition back to :opened
+  # # we've been :closed for a while, let's transition back to :slowed and try some queries again
+  # def closed(:state_timeout, :slowed, %__MODULE__{} = state) do
+  #   # for now, let's be a bit optimistic and set fail_count = 1. This means it will
+  #   # take 1 successful :slowed query to get back into :opened.
+  #   {:next_state, :slowed, %__MODULE__{state | fail_count: 1}}
+  # end
 
-  # postpone fetch requests when :closed
-  def closed(:cast, {:fetch, _from, _query}, %__MODULE__{} = state) do
-    {:keep_state, state, [:postpone]}
-  end
-
-  # successful query result
-  def closed(:info, {:fetch_complete, query, {:ok, _} = result}, state), do: forward_result(state, query, result)
-  def closed(:info, {:fetch_complete, query, :not_found}, state), do: forward_result(state, query, :not_found)
+  def closed(:state_timeout, {:fail_count, n}, state), do: {:next_state, :slowed, %__MODULE__{state | fail_count: n}}
+  def closed(:state_timeout, old_state, %__MODULE__{} = state), do: {:next_state, old_state, state}
+  def closed(:cast, {:fetch, _from, _query}, state), do: {:keep_state, state, [:postpone]}
+  def closed(:info, {:fetch_complete, query, {:ok, _} = result}, state), do: handle_result(state, query, result)
+  def closed(:info, {:fetch_complete, query, :not_found}, state), do: handle_result(state, query, :not_found)
 
   # timeout query result
   def closed(:info, {:fetch_complete, query, :timeout}, %__MODULE__{} = state) do
@@ -302,31 +207,39 @@ defmodule CAI.Census do
 
   ### HELPERS
 
-  # append the given `from` PID to the list under key `query` in the :pending map
-  defp put_pending(%__MODULE__{} = state, from, query) do
+  # if this request is a :retry, the requesting PIDs are already in :pending, so there's nothing to do
+  defp handle_request(%__MODULE__{} = state, :retry, query) do
+    fly(query, Map.get(state.transformers, query.collection, []))
+
+    state
+  end
+
+  # flies a request query (unless it's already been requested). Adds the requester to the :pending MapSet
+  defp handle_request(%__MODULE__{} = state, from, query) do
+    unless is_map_key(state.pending, query) do
+      fly(query, Map.get(state.transformers, query.collection, []))
+    end
+
     %__MODULE__{state | pending: Map.update(state.pending, query, MapSet.new([from]), &MapSet.put(&1, from))}
+    # cond do
+    #   map_size(state.pending) > @max_queries_in_flight ->
+    #     {:next_state, :closed, %__MODULE__{state | open_into: current_state}, [{:state_timeout, @closed_timeout_ms, :slowed}]}
+    # end
   end
 
-  # pop an element from the :pending map, also clearing any entry in :failed
-  defp pop_pending(%__MODULE__{} = state, query) do
-    {pids, pending} = Map.pop(state.pending, query, [])
-    failed = Map.delete(state.failed, query)
-
-    {pids, %__MODULE__{state | pending: pending, failed: failed}}
-  end
-
-  # puts a failed request's query in the :fetch_queue if it has not exceeded its max retries
+  # re-cast a failed request if it has not exceeded its max retries
   defp retry_if_able(%__MODULE__{} = state, query, error) do
     case Map.get(state.failed, query, 0) do
       num_retries when num_retries < @max_query_retries ->
-        fetch_queue = :queue.in({:fetch, :pid_irrelevant, query}, state.fetch_queue)
-        %__MODULE__{state | failed: Map.put(state.failed, query, num_retries + 1), fetch_queue: fetch_queue}
+        :gen_statem.cast(__MODULE__, {:fetch, :retry, query})
+
+        %__MODULE__{state | failed: Map.put(state.failed, query, num_retries + 1)}
 
       _max_retries_exceeded ->
         Logger.info("max retries exceeded for query with error #{inspect(error)}: #{inspect(query)}")
 
         state
-        |> forward_result(query, {:error, error})
+        |> handle_result(query, {:error, error})
         |> elem(1)
     end
   end
@@ -360,6 +273,8 @@ defmodule CAI.Census do
   end
 
   defp from_query_result({:error, %HTTPoison.Error{reason: :timeout}}) do
+    Logger.info("Census request resulted in a timeout")
+
     :timeout
   end
 
@@ -369,8 +284,11 @@ defmodule CAI.Census do
     {:error, error}
   end
 
-  defp forward_result(state, query, result) do
-    {pids, state} = pop_pending(state, query)
+  defp handle_result(state, query, result) do
+    {pids, pending} = Map.pop(state.pending, query, [])
+    failed = Map.delete(state.failed, query)
+
+    state = %__MODULE__{state | pending: pending, failed: failed}
 
     Logger.info(
       "forwarding #{inspect((is_tuple(result) && elem(result, 0)) || result)} to requesters: #{inspect(pids)}"
@@ -378,8 +296,14 @@ defmodule CAI.Census do
 
     for pid <- pids, do: send(pid, {:fetch, query, result})
 
-    fail_count = max(0, state.fail_count - 1)
+    state =
+      if match?({:error, _}, result) do
+        state
+      else
+        fail_count = max(0, state.fail_count - 1)
+        %__MODULE__{state | fail_count: fail_count}
+      end
 
-    {:keep_state, %__MODULE__{state | fail_count: fail_count, failed: Map.delete(state.failed, query)}}
+    {:keep_state, state}
   end
 end
