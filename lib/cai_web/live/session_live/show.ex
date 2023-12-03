@@ -299,28 +299,7 @@ defmodule CAIWeb.SessionLive.Show do
   def handle_info({:build_entries, pending_key}, socket) do
     case Map.fetch(socket.assigns.model.pending_groups, pending_key) do
       {:ok, group} ->
-        character = socket.assigns.model.character
-
-        character_map =
-          with [%{character_id: _} | _] <- group.bonuses,
-               {_, char_id, other_id} = pending_key,
-               placeholder_event = %GainExperience{character_id: char_id, other_id: other_id},
-               %Character{} = other <- Helpers.get_other_character(character.character_id, placeholder_event) do
-            %{other.character_id => other}
-          else
-            {:unavailable, other_id} -> %{other_id => {:unavailable, other_id}}
-            _ -> %{}
-          end
-          |> Map.put(character.character_id, character)
-
-        entries = Entry.from_groups(%{pending_key => group}, [], character_map)
-
-        {
-          :noreply,
-          socket
-          |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
-          |> stream(:events, entries, at: @prepend, limit: @events_limit)
-        }
+        build_entries(pending_key, group, socket)
 
       :error ->
         Logger.error("Received :build_entries message, but no group was found under #{inspect(pending_key)}")
@@ -354,24 +333,81 @@ defmodule CAIWeb.SessionLive.Show do
   end
 
   @impl true
-  def handle_info({:fetched, character_id, result}, socket) do
-    {entries, new_pending_queries} = Map.pop(socket.assigns.model.pending_queries, character_id, [])
+  def handle_info({:fetch, query, result}, socket) do
+    {entries, new_pending_queries} = Map.pop(socket.assigns.model.pending_queries, query, [])
     socket = Model.put(socket, :pending_queries, new_pending_queries)
 
-    new_other =
+    {new_character, character_id} =
       case result do
         {:ok, %Character{} = character} ->
-          character
+          {character, character.character_id}
 
-        res when res in [:not_found, :error] ->
-          {:unavailable, character_id}
+        _ ->
+          character_id = elem(query.params["character_id"], 1)
+          {{:unavailable, character_id}, character_id}
       end
 
     new_socket =
       for entry <- entries, reduce: socket do
-        socket -> stream_insert(socket, :events, %Entry{entry | other: new_other}, at: @append)
+        socket ->
+          case entry.event do
+            %{character_id: ^character_id} ->
+              update_entry(socket, %Entry{entry | character: new_character})
+
+            _ ->
+              update_entry(socket, %Entry{entry | other: new_character})
+          end
       end
 
     {:noreply, new_socket}
+  end
+
+  defp build_entries({_, char_id, other_id} = pending_key, group, socket) do
+    character = socket.assigns.model.character
+    pending_queries = socket.assigns.model.pending_queries
+
+    placeholder_event = %GainExperience{character_id: char_id, other_id: other_id}
+    other = Helpers.get_other_character(character.character_id, placeholder_event, &Characters.fetch_async/1)
+
+    other_id = if char_id == character.character_id, do: other_id, else: char_id
+    character_map = %{character.character_id => character, other_id => other}
+    entries = Entry.from_groups(%{pending_key => group}, [], character_map)
+
+    pending_queries =
+      Enum.reduce(character_map, pending_queries, fn
+        {_, {:being_fetched, _other_id, query}}, acc -> Map.update(acc, query, entries, &(entries ++ &1))
+        _, acc -> acc
+      end)
+
+    {
+      :noreply,
+      socket
+      |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
+      |> Model.put(:pending_queries, pending_queries)
+      |> stream(:events, entries, at: @prepend, limit: @events_limit)
+    }
+  end
+
+  defp build_entries({_, _, _, _} = pending_key, group, socket) do
+    character = socket.assigns.model.character
+
+    entries = Entry.from_groups(%{pending_key => group}, [], %{character.character_id => character})
+
+    {
+      :noreply,
+      socket
+      |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
+      |> stream(:events, entries, at: @prepend, limit: @events_limit)
+    }
+  end
+
+  defp update_entry(socket, entry) do
+    socket = stream_insert(socket, :events, entry, at: @append)
+
+    if socket.assigns.model.last_entry == entry do
+      Model.put(socket, :last_entry, entry)
+    else
+      socket
+    end
   end
 end
