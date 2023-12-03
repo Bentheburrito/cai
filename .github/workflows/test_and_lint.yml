@@ -15,7 +15,7 @@ jobs:
       MIX_ENV: github
     strategy:
       matrix:
-        elixir-version: ['1.14']
+        elixir-version: ['1.15']
         otp-version: ['25']
     steps:
       - uses: actions/checkout@v2
