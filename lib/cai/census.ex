@@ -175,14 +175,6 @@ defmodule CAI.Census do
     {:keep_state, state}
   end
 
-  # COMMENTING OUT for now - now that we're using transitions to :closed as part of :slowed's logic of firing queries every 1500ms, we can't use this because it will never transition back to :opened
-  # # we've been :closed for a while, let's transition back to :slowed and try some queries again
-  # def closed(:state_timeout, :slowed, %__MODULE__{} = state) do
-  #   # for now, let's be a bit optimistic and set fail_count = 1. This means it will
-  #   # take 1 successful :slowed query to get back into :opened.
-  #   {:next_state, :slowed, %__MODULE__{state | fail_count: 1}}
-  # end
-
   def closed(:state_timeout, {:fail_count, n}, state), do: {:next_state, :slowed, %__MODULE__{state | fail_count: n}}
   def closed(:state_timeout, old_state, %__MODULE__{} = state), do: {:next_state, old_state, state}
   def closed(:cast, {:fetch, _from, _query}, state), do: {:keep_state, state, [:postpone]}
@@ -223,7 +215,8 @@ defmodule CAI.Census do
     %__MODULE__{state | pending: Map.update(state.pending, query, MapSet.new([from]), &MapSet.put(&1, from))}
     # cond do
     #   map_size(state.pending) > @max_queries_in_flight ->
-    #     {:next_state, :closed, %__MODULE__{state | open_into: current_state}, [{:state_timeout, @closed_timeout_ms, :slowed}]}
+    #     {:next_state, :closed, %__MODULE__{state | open_into: current_state},
+    #       [{:state_timeout, @closed_timeout_ms, :slowed}]}
     # end
   end
 
@@ -246,10 +239,6 @@ defmodule CAI.Census do
 
   defp fly(query, transformers) do
     statem = self()
-
-    Logger.info(
-      "query for resource #{inspect(query.collection)}/#{inspect(query.params["character_id"] || query.params["name.first_lower"])} about to take flight"
-    )
 
     Task.Supervisor.start_child(TaskSupervisor, fn ->
       query

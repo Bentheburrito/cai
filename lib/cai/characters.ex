@@ -9,10 +9,10 @@ defmodule CAI.Characters do
   import Ecto.Query, warn: false
   import PS2.API.QueryBuilder, except: [field: 2]
 
+  alias CAI.Census
   alias CAI.Characters.{Character, Outfit, Session}
   alias CAI.Repo
   alias Ecto.Changeset
-  alias CAI.Census
   alias PS2.API.Query
 
   alias CAI.ESS.{
@@ -129,7 +129,7 @@ defmodule CAI.Characters do
     :error
   end
 
-  # TODO: make behaviour for these transformers
+  # (TODO): make behaviour for these transformers
   def cast_characters(data) do
     for params <- data do
       %Character{}
