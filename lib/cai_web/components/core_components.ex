@@ -659,7 +659,7 @@ defmodule CAIWeb.CoreComponents do
         >
           <div
             class={"h-1 #{Utils.faction_css_classes(@character.faction_id, nil)} brightness-150"}
-            style={"width: #{round(@character.percent_to_next_br)}%"}
+            phx-mounted={JS.set_attribute({"style", "width: #{round(@character.percent_to_next_br)}%"})}
           >
           </div>
         </div>
