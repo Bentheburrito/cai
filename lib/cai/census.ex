@@ -11,10 +11,10 @@ defmodule CAI.Census do
 
   @behaviour :gen_statem
 
-  # pending is a map that looks like %{Query.t() => [list_of_PIDs]}}
-  # failed is a similar map, but the values are the number of retries for that particular query.
+  # `:pending` is a map that looks like %{Query.t() => [list_of_PIDs]}}
+  # `:failed` is a similar map, but the values are the number of retries for that particular query.
   # e.g. %{Query.t() => number_of_retries}
-  # transformers is a map of collection names to a list of transformers.
+  # `:transformers` is a map of collection names to a list of transformers.
   # e.g. %{"character" => [&cast_to_char_struct/1, &put_in_caches/1]}
   defstruct pending: %{},
             failed: %{},
@@ -28,9 +28,9 @@ defmodule CAI.Census do
 
   @closed_timeout_ms 6_000
   @fail_count_threshold 3
-  @httpoison_timeout_ms 12 * 1000
+  @httpoison_timeout_ms 6 * 1000
   @max_query_retries 5
-  @max_queries_in_flight 3
+  # @max_queries_in_flight 3
   @slowed_period_ms 1_500
 
   ### API
@@ -242,7 +242,7 @@ defmodule CAI.Census do
 
     Task.Supervisor.start_child(TaskSupervisor, fn ->
       query
-      |> API.query(CAI.sid())
+      |> API.query(CAI.sid(), recv_timeout: @httpoison_timeout_ms)
       |> from_query_result()
       |> case do
         {:ok, data} ->
