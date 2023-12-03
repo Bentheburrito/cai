@@ -73,7 +73,7 @@ defmodule CAI.ESS.Helpers do
   Gets the `Character.t()` for the other character in this interaction (if there is one).
 
   Given `this_character_id`, an ESS event, and (optionally) a fetch function, will get the other Character for the
-  event. Will return `:noop` if the event does not contain a second character ID. If the fetch function does not return
+  event. Will raise if the event does not contain a second character ID. If the fetch function does not return
   `:ok` or `{:ok, Character.t()}`, this function will return `{:unavailable, other_id}`. If the fetch function returns
   `:ok` specifically, `{:being_fetched, other_id, query}` is returned.
   """
@@ -81,8 +81,8 @@ defmodule CAI.ESS.Helpers do
 
   def get_other_character(this_char_id, event, fetch_fn) do
     case do_get_other_character(this_char_id, event, fetch_fn) do
-      :noop ->
-        :noop
+      :none ->
+        :none
 
       {{:ok, %Character{} = other}, _other_id} ->
         other
@@ -121,5 +121,5 @@ defmodule CAI.ESS.Helpers do
     {fetch_fn.(e.character_id), e.character_id}
   end
 
-  defp do_get_other_character(_, _, _), do: :noop
+  defp do_get_other_character(_, _, _), do: :none
 end
