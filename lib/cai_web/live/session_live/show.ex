@@ -6,7 +6,7 @@ defmodule CAIWeb.SessionLive.Show do
   import CAIWeb.SessionLive.Helpers
   import Phoenix.Component, only: []
 
-  alias CAI.ESS.{GainExperience, Helpers, PlayerLogout}
+  alias CAI.ESS.{Helpers, PlayerLogout}
 
   alias CAI.Characters
   alias CAI.Characters.Character
@@ -362,14 +362,34 @@ defmodule CAIWeb.SessionLive.Show do
     {:noreply, new_socket}
   end
 
-  defp build_entries({_, char_id, other_id} = pending_key, group, socket) do
+  defp build_entries({_, _, _, _} = pending_key, group, socket) do
+    character = socket.assigns.model.character
+
+    entries = Entry.from_groups(%{pending_key => group}, [], %{character.character_id => character})
+
+    {
+      :noreply,
+      socket
+      |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
+      |> stream(:events, entries, at: @prepend, limit: @events_limit)
+    }
+  end
+
+  defp build_entries(pending_key, group, socket) do
     character = socket.assigns.model.character
     pending_queries = socket.assigns.model.pending_queries
 
-    placeholder_event = %GainExperience{character_id: char_id, other_id: other_id}
-    other = Helpers.get_other_character(character.character_id, placeholder_event, &Characters.fetch_async/1)
+    group_event = Map.get_lazy(group, :event, fn -> group |> Map.get(:bonuses, []) |> List.first() end)
+    other = Helpers.get_other_character(character.character_id, group_event, &Characters.fetch_async/1)
 
-    other_id = if char_id == character.character_id, do: other_id, else: char_id
+    other_id =
+      case other do
+        %Character{character_id: id} -> id
+        {_, id} -> id
+        {_, id, _} -> id
+        :none -> nil
+      end
+
     character_map = %{character.character_id => character, other_id => other}
     entries = Entry.from_groups(%{pending_key => group}, [], character_map)
 
@@ -384,19 +404,6 @@ defmodule CAIWeb.SessionLive.Show do
       socket
       |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
       |> Model.put(:pending_queries, pending_queries)
-      |> stream(:events, entries, at: @prepend, limit: @events_limit)
-    }
-  end
-
-  defp build_entries({_, _, _, _} = pending_key, group, socket) do
-    character = socket.assigns.model.character
-
-    entries = Entry.from_groups(%{pending_key => group}, [], %{character.character_id => character})
-
-    {
-      :noreply,
-      socket
-      |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
       |> stream(:events, entries, at: @prepend, limit: @events_limit)
     }
   end
