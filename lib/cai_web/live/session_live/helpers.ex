@@ -38,8 +38,8 @@ defmodule CAIWeb.SessionLive.Helpers do
     handle_enrichable_event(event, socket)
   end
 
-  # kill bonus GE event
-  def handle_ess_event(%{experience_id: id} = event, socket) when is_kill_xp(id) do
+  # kill or vehicle bonus GE event
+  def handle_ess_event(%{experience_id: id} = event, socket) when is_kill_xp(id) or is_vehicle_bonus_xp(id) do
     handle_bonus_event(event, socket)
   end
 
@@ -52,11 +52,6 @@ defmodule CAIWeb.SessionLive.Helpers do
   # ignore facility control events not for the current world
   def handle_ess_event(%FacilityControl{}, socket) do
     {:noreply, socket}
-  end
-
-  # vehicle bonuses
-  def handle_ess_event(%{experience_id: id} = event, socket) when is_vehicle_bonus_xp(id) do
-    handle_bonus_event(event, socket)
   end
 
   # catch-all/ordinary event that doesn't need to be condensed

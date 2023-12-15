@@ -409,12 +409,11 @@ defmodule CAIWeb.SessionLive.Show do
   end
 
   defp update_entry(socket, entry) do
-    socket = stream_insert(socket, :events, entry, at: @append)
-
-    if socket.assigns.model.last_entry == entry do
+    if event_to_dom_id(socket.assigns.model.last_entry) == event_to_dom_id(entry) do
       Model.put(socket, :last_entry, entry)
     else
       socket
     end
+    |> stream_insert(:events, entry, at: @append)
   end
 end
