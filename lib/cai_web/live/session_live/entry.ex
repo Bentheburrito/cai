@@ -14,7 +14,7 @@ defmodule CAIWeb.SessionLive.Entry do
   which case "(x2)" would be appended to the regular message.
   """
 
-  import CAI.Guards, only: [is_kill_xp: 1]
+  import CAI.Guards, only: [is_kill_xp: 1, is_vehicle_bonus_xp: 1]
 
   alias CAI.Characters
   alias CAI.ESS.{Death, FacilityControl, GainExperience, PlayerFacilityCapture, PlayerFacilityDefend, VehicleDestroy}
@@ -194,6 +194,17 @@ defmodule CAIWeb.SessionLive.Entry do
 
         condense_event_with_bonuses(rem_events, mapped, new_grouped, target_t, character_map)
 
+      %GainExperience{experience_id: id} when is_vehicle_bonus_xp(id) ->
+        new_grouped =
+          Map.update(
+            grouped,
+            {:vehicle, event.timestamp, event.character_id},
+            %{event: nil, bonuses: [event]},
+            &Map.update!(&1, :bonuses, fn bonuses -> [event | bonuses] end)
+          )
+
+        condense_event_with_bonuses(rem_events, mapped, new_grouped, target_t, character_map)
+
       # put a GE kill XP bonus event for a grouped entry
       %GainExperience{experience_id: id} when is_kill_xp(id) ->
         new_grouped =
@@ -226,6 +237,18 @@ defmodule CAIWeb.SessionLive.Entry do
             {event.timestamp, event.world_id, event.zone_id, event.facility_id},
             %{event: nil, bonuses: [event]},
             &Map.update!(&1, :bonuses, fn bonuses -> [event | bonuses] end)
+          )
+
+        condense_event_with_bonuses(rem_events, mapped, new_grouped, target_t, character_map)
+
+      # put a VehicleDestroy event as the primary event for a grouped entry
+      %VehicleDestroy{} ->
+        new_grouped =
+          Map.update(
+            grouped,
+            {:vehicle, event.timestamp, event.attacker_character_id},
+            %{event: event, bonuses: []},
+            &Map.put(&1, :event, event)
           )
 
         condense_event_with_bonuses(rem_events, mapped, new_grouped, target_t, character_map)

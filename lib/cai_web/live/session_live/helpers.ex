@@ -7,7 +7,7 @@ defmodule CAIWeb.SessionLive.Helpers do
     router: CAIWeb.Router,
     statics: CAIWeb.static_paths()
 
-  import CAI.Guards, only: [is_kill_xp: 1]
+  import CAI.Guards, only: [is_kill_xp: 1, is_vehicle_bonus_xp: 1]
   import Phoenix.LiveView
 
   alias CAI.ESS.{
@@ -17,7 +17,8 @@ defmodule CAIWeb.SessionLive.Helpers do
     Helpers,
     MetagameEvent,
     PlayerFacilityCapture,
-    PlayerFacilityDefend
+    PlayerFacilityDefend,
+    VehicleDestroy
   }
 
   alias CAI.Characters
@@ -31,14 +32,14 @@ defmodule CAIWeb.SessionLive.Helpers do
   @events_limit 15
 
   # Death or PlayerFacilityCapture/Defend primary event
-  @enrichable_events [Death, PlayerFacilityCapture, PlayerFacilityDefend]
+  @enrichable_events [Death, VehicleDestroy, PlayerFacilityCapture, PlayerFacilityDefend]
   @event_pending_delay 1000
   def handle_ess_event(%mod{} = event, socket) when mod in @enrichable_events do
     handle_enrichable_event(event, socket)
   end
 
-  # kill bonus GE event
-  def handle_ess_event(%{experience_id: id} = event, socket) when is_kill_xp(id) do
+  # kill or vehicle bonus GE event
+  def handle_ess_event(%{experience_id: id} = event, socket) when is_kill_xp(id) or is_vehicle_bonus_xp(id) do
     handle_bonus_event(event, socket)
   end
 
@@ -183,6 +184,11 @@ defmodule CAIWeb.SessionLive.Helpers do
   end
 
   defp group_key(%Death{} = death), do: {death.timestamp, death.attacker_character_id, death.character_id}
+  defp group_key(%VehicleDestroy{} = vd), do: {:vehicle, vd.timestamp, vd.attacker_character_id}
+
+  defp group_key(%GainExperience{experience_id: id} = ge) when is_vehicle_bonus_xp(id),
+    do: {:vehicle, ge.timestamp, ge.character_id}
+
   defp group_key(%GainExperience{} = ge), do: {ge.timestamp, ge.character_id, ge.other_id}
   defp group_key(%PlayerFacilityCapture{} = cap), do: {cap.timestamp, cap.world_id, cap.zone_id, cap.facility_id}
   defp group_key(%PlayerFacilityDefend{} = def), do: {def.timestamp, def.world_id, def.zone_id, def.facility_id}

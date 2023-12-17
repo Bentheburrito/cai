@@ -8,6 +8,8 @@ defmodule CAI do
   """
   require CAI.Macros
 
+  import CAI.Guards, only: [is_dogfighter_xp: 1, is_vehicle_destruction_xp: 1]
+
   def sid, do: System.get_env("SERVICE_ID")
 
   CAI.Macros.static_getter(:facility)
@@ -53,6 +55,12 @@ defmodule CAI do
   def xp_icon(279, _team_id), do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/14985.png")}
   # bounty kill bonus
   def xp_icon(593, _team_id), do: {:ok, "/images/92995_red_cropped.png"}
+
+  def xp_icon(id, _team_id) when is_dogfighter_xp(id),
+    do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/77982.png")}
+
+  def xp_icon(id, _team_id) when is_vehicle_destruction_xp(id),
+    do: {:ok, PS2.API.get_image_url("/files/ps2/images/static/13909.png")}
 
   def xp_icon(_, _), do: :noop
 
