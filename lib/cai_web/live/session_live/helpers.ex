@@ -86,7 +86,7 @@ defmodule CAIWeb.SessionLive.Helpers do
 
       socket =
         case other do
-          {:being_fetched, _other_id, query} ->
+          {:fetching, _other_id, query} ->
             Model.update(
               socket,
               :pending_queries,

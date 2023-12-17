@@ -191,7 +191,12 @@
       </tr>
     </table>
     <div class="flex-col ml-4">
-      XP Earned: <%= @model.aggregates.xp_earned %> <br /> Revive Count: <%= @model.aggregates.revive_count %> <br />
+      XP Earned: <%= @model.aggregates.xp_earned %> <br /> 
+      Teammates Revived: <%= @model.aggregates.revive_count %> <br />
+      Times Revived: <%= @model.aggregates.revived_by_count %><br />
+      <%= unless @model.aggregates.nemesis_id == 0 do %>
+        Nemesis: <Utils.link_character character={{:unavailable, @model.aggregates.nemesis_id}} /> (died to <%= @model.aggregates.nemesis_value %> times)
+      <% end %>
       <br />
       Note: you can hover over some headers to see a more descriptive title, or hover over certain cells to see how they're calculated
     </div>

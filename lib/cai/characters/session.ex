@@ -41,7 +41,10 @@ defmodule CAI.Characters.Session do
       :kill_ivi_count,
       :death_ivi_count,
       :death_count,
+      :nemesis_id,
+      :nemesis_value,
       :revive_count,
+      :revived_by_count,
       :vehicle_kill_count,
       :vehicle_death_count,
       :nanites_destroyed,
@@ -59,7 +62,11 @@ defmodule CAI.Characters.Session do
     field(:kill_ivi_count, :integer, default: 0)
     field(:death_ivi_count, :integer, default: 0)
     field(:death_count, :integer, default: 0)
+    field(:death_map, :map, default: %{})
+    field(:nemesis_id, :integer, default: 0)
+    field(:nemesis_value, :integer, default: 0)
     field(:revive_count, :integer, default: 0)
+    field(:revived_by_count, :integer, default: 0)
     field(:vehicle_kill_count, :integer, default: 0)
     field(:vehicle_death_count, :integer, default: 0)
     field(:nanites_destroyed, :integer, default: 0)
@@ -183,10 +190,16 @@ defmodule CAI.Characters.Session do
   defp put_aggregates(changeset, _), do: changeset
 
   def put_aggregate_event(%GainExperience{} = ge, params, character_id) do
-    revive_add = if CAI.Guards.is_revive_xp(ge.experience_id) and ge.character_id == character_id, do: 1, else: 0
+    {revive_add, revived_by_add} =
+      cond do
+        not CAI.Guards.is_revive_xp(ge.experience_id) -> {0, 0}
+        ge.character_id == character_id -> {1, 0}
+        ge.other_id == character_id -> {0, 1}
+      end
 
     params
     |> Map.update(:revive_count, revive_add, &(&1 + revive_add))
+    |> Map.update(:revived_by_count, revived_by_add, &(&1 + revived_by_add))
     |> Map.update(:xp_earned, ge.amount, &(&1 + ge.amount))
   end
 
@@ -194,9 +207,13 @@ defmodule CAI.Characters.Session do
     if death.character_id == character_id do
       death_ivi_add = if CAI.get_weapon(death.attacker_weapon_id)["sanction"] == "infantry", do: 1, else: 0
 
+      attacker_id = death.attacker_character_id
+
       params
       |> Map.update(:death_count, 1, &(&1 + 1))
       |> Map.update(:death_ivi_count, death_ivi_add, &(&1 + death_ivi_add))
+      |> Map.update(:death_map, %{attacker_id => 1}, &inc_map_key(&1, attacker_id))
+      |> update_nemesis(attacker_id)
     else
       kill_ivi_add = if CAI.get_weapon(death.attacker_weapon_id)["sanction"] == "infantry", do: 1, else: 0
       kill_hs_add = if death.is_headshot, do: 1, else: 0
@@ -244,5 +261,17 @@ defmodule CAI.Characters.Session do
     |> cast_embed(:vehicle_destroys, with: &ESS.VehicleDestroy.changeset/2)
     |> cast_embed(:login, with: &ESS.PlayerLogin.changeset/2)
     |> cast_embed(:logout, with: &ESS.PlayerLogout.changeset/2)
+  end
+
+  defp inc_map_key(map, key), do: Map.update(map, key, 1, &(&1 + 1))
+
+  defp update_nemesis(params, attacker_id) do
+    if params.death_map[attacker_id] >= Map.get(params, :nemesis_value, 0) do
+      params
+      |> Map.put(:nemesis_id, attacker_id)
+      |> Map.put(:nemesis_value, params.death_map[attacker_id])
+    else
+      params
+    end
   end
 end

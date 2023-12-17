@@ -11,6 +11,7 @@ defmodule CAIWeb.SessionLive.Show do
   alias CAI.Characters
   alias CAI.Characters.Character
   alias CAI.Characters.Session
+  alias CAIWeb.EventFeed.Utils
   alias CAIWeb.SessionLive.{Blurbs, Entry}
   alias CAIWeb.SessionLive.Show.Model
   alias Phoenix.PubSub
@@ -41,7 +42,7 @@ defmodule CAIWeb.SessionLive.Show do
          {:ok, logout} <- parse_int_param(logout, socket),
          {:ok, %Character{} = character} <- get_character(character_id, socket),
          {:ok, session} <- Session.build(character.character_id, login, logout),
-         {:ok, event_history} <- get_session_history(character.character_id, login, logout, socket) do
+         {:ok, event_history} <- get_session_history(session, login, logout, socket) do
       {init_events, remaining_events, new_limit} = split_events_while(event_history, @events_limit)
 
       bulk_append(init_events, character, new_limit)
@@ -53,6 +54,7 @@ defmodule CAIWeb.SessionLive.Show do
         |> Model.put(
           aggregates: Map.take(session, Session.aggregate_fields()),
           character: character,
+          duration_mins: Float.round((logout - login) / 60, 2),
           live?: false,
           loading_more?: true,
           page_title: "#{character.name_first}'s Previous Session",
@@ -395,7 +397,7 @@ defmodule CAIWeb.SessionLive.Show do
 
     pending_queries =
       Enum.reduce(character_map, pending_queries, fn
-        {_, {:being_fetched, _other_id, query}}, acc -> Map.update(acc, query, entries, &(entries ++ &1))
+        {_, {:fetching, _other_id, query}}, acc -> Map.update(acc, query, entries, &(entries ++ &1))
         _, acc -> acc
       end)
 

@@ -40,7 +40,7 @@ defmodule CAIWeb.EventFeed.Utils do
   attr(:team_id, :integer, default: 0)
   attr(:possessive?, :boolean, default: false)
 
-  def link_character(%{character: {:being_fetched, _other_id, _query}} = assigns) do
+  def link_character(%{character: {:fetching, _other_id, _query}} = assigns) do
     ~H"""
     <.link navigate={~p"/sessions/#{elem(@character, 1)}"} class="rounded pl-1 pr-1 mr-1 bg-gray-800 hover:text-gray-400">
       <.vehicle_icon vehicle_id={@vehicle_id} character_name="[Loading...]" />
