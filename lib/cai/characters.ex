@@ -31,7 +31,7 @@ defmodule CAI.Characters do
   @type character_id :: integer()
   @type character_name :: String.t()
   @type character_reference :: character_name | character_id
-  @type character_fetch_result :: {:ok, Character.t()} | :not_found | {:error, :timeout | map()}
+  @type character_fetch_result :: {:ok, Character.t()} | :not_found | {:error, :timeout | :bad_character_ref | map()}
   @type character_async_result :: character_fetch_result() | {:fetching, Query.t()}
 
   @cache_ttl_ms 12 * 60 * 60 * 1000
@@ -126,7 +126,7 @@ defmodule CAI.Characters do
   end
 
   defp do_fetch(_non_character_id, _fallback_fn) do
-    :error
+    {:error, :bad_character_ref}
   end
 
   # (TODO): make behaviour for these transformers

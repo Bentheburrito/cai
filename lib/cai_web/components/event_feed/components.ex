@@ -11,7 +11,7 @@ defmodule CAIWeb.EventFeed.Components do
 
   import CAI.Guards, only: [is_revive_xp: 1, is_assist_xp: 1, is_gunner_assist_xp: 1]
   import CAIWeb.CoreComponents, only: [hover_timestamp: 1]
-  import CAIWeb.EventFeed.Utils
+  import CAIWeb.SessionComponents
 
   alias CAI.Characters.Outfit
 
@@ -225,7 +225,7 @@ defmodule CAIWeb.EventFeed.Components do
     <.link_character character={@character} team_id={@event.team_id} loadout_id={@event.loadout_id} />
     gained <%= @event.amount %>
     <span title={"XP ID: #{@event.experience_id}"}><%= CAI.get_xp(@event.experience_id)["description"] %> XP</span>
-    via <.link_character character={@other} />
+    <.link_character character={@other} prepend="via" />
     """
   end
 

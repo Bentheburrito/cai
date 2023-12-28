@@ -6,8 +6,7 @@ defmodule CAI.ESS.Helpers do
   import Ecto.Query
 
   alias CAI.Characters
-  alias CAI.Characters.Character
-  alias CAI.ESS.{Death, GainExperience, PlayerLogout, VehicleDestroy}
+  alias CAI.ESS.PlayerLogout
 
   require Logger
 
@@ -70,56 +69,15 @@ defmodule CAI.ESS.Helpers do
   end
 
   @doc """
-  Gets the `Character.t()` for the other character in this interaction (if there is one).
-
-  Given `this_character_id`, an ESS event, and (optionally) a fetch function, will get the other Character for the
-  event. Will raise if the event does not contain a second character ID. If the fetch function does not return
-  `:ok` or `{:ok, Character.t()}`, this function will return `{:unavailable, other_id}`. If the fetch function returns
-  `:ok` specifically, `{:fetching, other_id, query}` is returned.
+  Gets the `t:Characters.character_id()` for the other character in this interaction (or `:none` if this event does not
+  have a secondary character ID).
   """
-  def get_other_character(this_char_id, event, fetch_fn \\ &Characters.fetch/1)
+  def get_other_character_id(this_char_id, %{character_id: this_char_id, other_id: _} = e), do: e.other_id
+  def get_other_character_id(this_char_id, %{other_id: this_char_id} = e), do: e.character_id
 
-  def get_other_character(this_char_id, event, fetch_fn) do
-    case do_get_other_character(this_char_id, event, fetch_fn) do
-      :none ->
-        :none
+  def get_other_character_id(this_char_id, %{character_id: this_char_id, attacker_character_id: _} = e),
+    do: e.attacker_character_id
 
-      {{:ok, %Character{} = other}, _other_id} ->
-        other
-
-      {{:fetching, query}, other_id} ->
-        {:fetching, other_id, query}
-
-      {{:ok, :not_found}, other_id} ->
-        Logger.info("Character ID not_found: #{other_id}")
-        {:unavailable, other_id}
-
-      {reason, other_id} ->
-        if CAI.Guards.character_id?(other_id) do
-          Logger.warning("Couldn't fetch other character (ID #{inspect(other_id)}) for an event: #{inspect(reason)}")
-        end
-
-        {:unavailable, other_id}
-    end
-  end
-
-  defp do_get_other_character(this_char_id, %GainExperience{character_id: this_char_id} = ge, fetch_fn) do
-    {fetch_fn.(ge.other_id), ge.other_id}
-  end
-
-  defp do_get_other_character(this_char_id, %GainExperience{other_id: this_char_id} = ge, fetch_fn) do
-    {fetch_fn.(ge.character_id), ge.character_id}
-  end
-
-  defp do_get_other_character(this_char_id, %mod{character_id: this_char_id} = e, fetch_fn)
-       when mod in [Death, VehicleDestroy] do
-    {fetch_fn.(e.attacker_character_id), e.attacker_character_id}
-  end
-
-  defp do_get_other_character(this_char_id, %mod{attacker_character_id: this_char_id} = e, fetch_fn)
-       when mod in [Death, VehicleDestroy] do
-    {fetch_fn.(e.character_id), e.character_id}
-  end
-
-  defp do_get_other_character(_, _, _), do: :none
+  def get_other_character_id(this_char_id, %{attacker_character_id: this_char_id} = e), do: e.character_id
+  def get_other_character_id(_, _), do: :none
 end

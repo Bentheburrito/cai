@@ -10,6 +10,8 @@ defmodule CAIWeb.SessionLive.Helpers do
   import CAI.Guards, only: [is_kill_xp: 1, is_vehicle_bonus_xp: 1]
   import Phoenix.LiveView
 
+  alias CAI.Characters.Session
+
   alias CAI.ESS.{
     Death,
     FacilityControl,
@@ -34,28 +36,28 @@ defmodule CAIWeb.SessionLive.Helpers do
   # Death or PlayerFacilityCapture/Defend primary event
   @enrichable_events [Death, VehicleDestroy, PlayerFacilityCapture, PlayerFacilityDefend]
   @event_pending_delay 1000
-  def handle_ess_event(%mod{} = event, socket) when mod in @enrichable_events do
+  def handle_ess_event(socket, %mod{} = event) when mod in @enrichable_events do
     handle_enrichable_event(event, socket)
   end
 
   # kill or vehicle bonus GE event
-  def handle_ess_event(%{experience_id: id} = event, socket) when is_kill_xp(id) or is_vehicle_bonus_xp(id) do
+  def handle_ess_event(socket, %{experience_id: id} = event) when is_kill_xp(id) or is_vehicle_bonus_xp(id) do
     handle_bonus_event(event, socket)
   end
 
   # facility control bonus event (only for the current world)
-  def handle_ess_event(%FacilityControl{world_id: world_id} = event, socket)
+  def handle_ess_event(socket, %FacilityControl{world_id: world_id} = event)
       when world_id == socket.assigns.model.world_id do
     handle_bonus_event(event, socket)
   end
 
   # ignore facility control events not for the current world
-  def handle_ess_event(%FacilityControl{}, socket) do
+  def handle_ess_event(socket, %FacilityControl{}) do
     {:noreply, socket}
   end
 
   # catch-all/ordinary event that doesn't need to be condensed
-  def handle_ess_event(event, socket) do
+  def handle_ess_event(socket, event) do
     last_entry = socket.assigns.model.last_entry || Entry.new(%MetagameEvent{timestamp: :os.system_time(:second)}, %{})
 
     socket =
@@ -73,10 +75,14 @@ defmodule CAIWeb.SessionLive.Helpers do
         |> Model.put(:last_entry, updated_entry)
       }
     else
-      # ugh.......please clean this up after reworking the async character fetching mechanism.....
       %{character_id: character_id} = character = socket.assigns.model.character
 
-      other = Helpers.get_other_character(character_id, event, &Characters.fetch_async/1)
+      other_id = Helpers.get_other_character_id(character_id, event)
+
+      other =
+        other_id
+        |> Characters.fetch_async()
+        |> Entry.async_result_to_presentable_character(other_id)
 
       entry =
         case event do
@@ -86,11 +92,11 @@ defmodule CAIWeb.SessionLive.Helpers do
 
       socket =
         case other do
-          {:fetching, _other_id, query} ->
+          %{state: {:loading, query}} ->
             Model.update(
               socket,
               :pending_queries,
-              &Map.update(&1, query, [entry], fn entries -> [entry | entries] end)
+              &Map.update(&1, query, [{:entry, entry}], fn items -> [{:entry, entry} | items] end)
             )
 
           _ ->
@@ -161,20 +167,24 @@ defmodule CAIWeb.SessionLive.Helpers do
   end
 
   # Get a character's events from the session defined by login..logout
-  def get_session_history(session, login, logout, socket) do
-    case Characters.get_session_history(session, login, logout) do
-      events when is_list(events) ->
-        {:ok, events}
+  def get_session_history(%Session{} = session, login, logout, _socket) do
+    events = Characters.get_session_history(session, login, logout)
 
-      {:error, changeset} ->
-        Logger.error(
-          "Unable to get session history because of a changeset error building the session: #{inspect(changeset)}"
-        )
+    {:ok, session, events}
+  end
+
+  def get_session_history(character_id, login, logout, socket) do
+    case Session.build(character_id, login, logout) do
+      {:ok, session} ->
+        get_session_history(session, login, logout, socket)
+
+      {:error, error} ->
+        Logger.error("Could not build a session for #{character_id}: #{inspect(error)}")
 
         {:noreply,
          socket
          |> put_flash(:error, "Unable to load that session right now. Please try again")
-         |> push_navigate(to: ~p"/sessions/#{session.character_id}")}
+         |> push_navigate(to: ~p"/sessions/#{character_id}")}
     end
   end
 

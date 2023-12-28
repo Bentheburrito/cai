@@ -15,6 +15,7 @@ defmodule CAI.Characters.Session do
   import Ecto.Query
 
   require CAI.Guards
+  require Logger
 
   alias CAI.Characters.Session
   alias CAI.{ESS, Repo}
@@ -30,28 +31,10 @@ defmodule CAI.Characters.Session do
     VehicleDestroy
   }
 
+  @character_default %{character: %{character_id: 0}, value: 0}
+
   def session_timeout_mins, do: @session_timeout_mins
   def session_timeout_ms, do: @session_timeout_mins * 60 * 1000
-
-  def aggregate_fields do
-    [
-      :kill_count,
-      :kill_hs_count,
-      :kill_hs_ivi_count,
-      :kill_ivi_count,
-      :death_ivi_count,
-      :death_count,
-      :nemesis_id,
-      :nemesis_value,
-      :revive_count,
-      :revived_by_count,
-      :vehicle_kill_count,
-      :vehicle_death_count,
-      :nanites_destroyed,
-      :nanites_lost,
-      :xp_earned
-    ]
-  end
 
   embedded_schema do
     field(:character_id, :integer)
@@ -60,11 +43,12 @@ defmodule CAI.Characters.Session do
     field(:kill_hs_count, :integer, default: 0)
     field(:kill_hs_ivi_count, :integer, default: 0)
     field(:kill_ivi_count, :integer, default: 0)
+    field(:kill_map, :map, default: %{})
     field(:death_ivi_count, :integer, default: 0)
     field(:death_count, :integer, default: 0)
     field(:death_map, :map, default: %{})
-    field(:nemesis_id, :integer, default: 0)
-    field(:nemesis_value, :integer, default: 0)
+    field(:nemesis, :map, default: @character_default)
+    field(:vanquished, :map, default: @character_default)
     field(:revive_count, :integer, default: 0)
     field(:revived_by_count, :integer, default: 0)
     field(:vehicle_kill_count, :integer, default: 0)
@@ -83,6 +67,33 @@ defmodule CAI.Characters.Session do
     embeds_one(:logout, ESS.PlayerLogout)
 
     timestamps()
+  end
+
+  def aggregate_character_fields do
+    [:nemesis, :vanquished]
+  end
+
+  def take_aggregates(session \\ %Session{}) do
+    [
+      :kill_count,
+      :kill_hs_count,
+      :kill_hs_ivi_count,
+      :kill_ivi_count,
+      :death_ivi_count,
+      :death_count,
+      :revive_count,
+      :revived_by_count,
+      :vehicle_kill_count,
+      :vehicle_death_count,
+      :nanites_destroyed,
+      :nanites_lost,
+      :xp_earned
+    ]
+    |> Enum.concat(Enum.map(aggregate_character_fields(), &{&1, @character_default}))
+    |> Map.new(fn
+      {field, default} -> {field, Map.get(session, field, default)}
+      field -> {field, Map.get(session, field, 0)}
+    end)
   end
 
   @doc """
@@ -109,6 +120,15 @@ defmodule CAI.Characters.Session do
         do_build(character_id, changeset, login, logout)
 
       invalid_cs ->
+        bubbled_errors =
+          Ecto.Changeset.traverse_errors(invalid_cs, fn {msg, opts} ->
+            Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
+              opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
+            end)
+          end)
+
+        Logger.error("Could not build session: #{inspect(bubbled_errors)}")
+
         {:error, invalid_cs}
     end
   end
@@ -213,7 +233,7 @@ defmodule CAI.Characters.Session do
       |> Map.update(:death_count, 1, &(&1 + 1))
       |> Map.update(:death_ivi_count, death_ivi_add, &(&1 + death_ivi_add))
       |> Map.update(:death_map, %{attacker_id => 1}, &inc_map_key(&1, attacker_id))
-      |> update_nemesis(attacker_id)
+      |> update_aggregate_char(:nemesis, :death_map, attacker_id)
     else
       kill_ivi_add = if CAI.get_weapon(death.attacker_weapon_id)["sanction"] == "infantry", do: 1, else: 0
       kill_hs_add = if death.is_headshot, do: 1, else: 0
@@ -224,6 +244,8 @@ defmodule CAI.Characters.Session do
       |> Map.update(:kill_ivi_count, kill_ivi_add, &(&1 + kill_ivi_add))
       |> Map.update(:kill_hs_count, kill_hs_add, &(&1 + kill_hs_add))
       |> Map.update(:kill_hs_ivi_count, kill_hs_ivi_add, &(&1 + kill_hs_ivi_add))
+      |> Map.update(:kill_map, %{death.character_id => 1}, &inc_map_key(&1, death.character_id))
+      |> update_aggregate_char(:vanquished, :kill_map, death.character_id)
     end
   end
 
@@ -265,11 +287,15 @@ defmodule CAI.Characters.Session do
 
   defp inc_map_key(map, key), do: Map.update(map, key, 1, &(&1 + 1))
 
-  defp update_nemesis(params, attacker_id) do
-    if params.death_map[attacker_id] >= Map.get(params, :nemesis_value, 0) do
+  defp update_aggregate_char(params, field, type_map, character_id) do
+    if params[type_map][character_id] >= (get_in(params, [field, :value]) || 0) do
       params
-      |> Map.put(:nemesis_id, attacker_id)
-      |> Map.put(:nemesis_value, params.death_map[attacker_id])
+      |> Map.update(
+        field,
+        %{character: %{character_id: character_id}},
+        &Map.put(&1, :character, %{character_id: character_id})
+      )
+      |> Map.update!(field, &Map.put(&1, :value, params[type_map][character_id]))
     else
       params
     end

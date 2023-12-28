@@ -19,7 +19,7 @@ defmodule CAIWeb.SessionLive.Entry do
   alias CAI.Characters
   alias CAI.ESS.{Death, FacilityControl, GainExperience, PlayerFacilityCapture, PlayerFacilityDefend, VehicleDestroy}
 
-  alias CAI.Characters.Character
+  alias CAI.Characters.{Character, PendingCharacter}
   alias CAI.ESS.Helpers
   alias CAIWeb.SessionLive.Entry
 
@@ -27,12 +27,15 @@ defmodule CAIWeb.SessionLive.Entry do
   defstruct event: nil, character: nil, other: :none, count: 1, bonuses: []
   @type t :: %__MODULE__{}
 
-  @type other_character :: Character.t() | {:fetching, Characters.character_id(), Query.t()} | :none
+  @type presentable_character :: Character.t() | PendingCharacter.t()
 
   @doc """
   Create a new Entry struct
   """
-  @spec new(event :: map(), character :: Character.t(), other :: other_character(), integer(), [map()]) :: Entry.t()
+  @spec new(event :: map(), character :: presentable_character(), other :: presentable_character() | :none, integer(), [
+          map()
+        ]) ::
+          Entry.t()
   def new(event, character, other \\ :none, count \\ 1, bonuses \\ []) do
     %Entry{event: event, character: character, other: other, count: count, bonuses: bonuses}
   end
@@ -67,25 +70,29 @@ defmodule CAIWeb.SessionLive.Entry do
   end
 
   @doc """
+  Given an async fetch result and a character ID, returns the corresponding `t:presentable_character()`
+  """
+  @spec async_result_to_presentable_character(Characters.character_async_result(), Characters.character_id()) ::
+          presentable_character()
+  def async_result_to_presentable_character(fetch_result, character_id) do
+    case fetch_result do
+      {:ok, character} -> character
+      {:fetching, query} -> %PendingCharacter{state: {:loading, query}, character_id: character_id}
+      :not_found -> %PendingCharacter{state: :unavailable, character_id: character_id}
+      {:error, _error} -> %PendingCharacter{state: :unavailable, character_id: character_id}
+    end
+  end
+
+  @doc """
   Map ESS events to entries.
 
-  Fetches all other Characters involved in the given events in (at most) one Census query. Can optionally take in a list
-  of Character structs that don't need to be fetched, which would be merged with the fetched Characters
+  Takes a list of events and returns a list of `Entry`s. This function expects a character map in order to properly map
+  the character IDs in the events to `Character` structs. The map keys should the `t:Characters.character_id()`s, and
+  the values `t:presentable_character()`s. If a character ID in an event doesn't have a corresponding entry in the
+  `character_map`, it will default to a `PendingCharacter` struct with `:state` set to `:unavailable`.
   """
-  @spec map([map()], [Character.t()]) :: [Entry.t()]
-  def map(events, already_fetched \\ []) do
-    already_fetched_map = Map.new(already_fetched, &{&1.character_id, &1})
-
-    other_character_ids =
-      Stream.flat_map(
-        events,
-        &(Map.take(&1, [:character_id, :attacker_character_id, :other_id]) |> Map.values())
-      )
-      |> MapSet.new()
-      |> MapSet.difference(MapSet.new([nil, 0 | Map.keys(already_fetched_map)]))
-
-    character_map = other_character_ids |> Characters.get_many() |> Map.merge(already_fetched_map)
-
+  @spec map([map()], %{Characters.character_id() => presentable_character()}) :: [Entry.t()]
+  def map(events, character_map \\ %{}) do
     events
     |> do_map(character_map)
     |> Enum.reverse()
@@ -134,12 +141,11 @@ defmodule CAIWeb.SessionLive.Entry do
     do_map([new(e, character, other) | mapped], rem_events, character_map)
   end
 
-  defp map_ids_to_characters(%GainExperience{character_id: character_id, other_id: other_id}, character_map) do
+  defp map_ids_to_characters(%{character_id: character_id, other_id: other_id}, character_map) do
     {get_character(character_map, character_id), get_character(character_map, other_id)}
   end
 
-  defp map_ids_to_characters(%mod{character_id: character_id, attacker_character_id: attacker_id}, character_map)
-       when mod in [Death, VehicleDestroy] do
+  defp map_ids_to_characters(%{character_id: character_id, attacker_character_id: attacker_id}, character_map) do
     {get_character(character_map, character_id), get_character(character_map, attacker_id)}
   end
 
@@ -152,12 +158,7 @@ defmodule CAIWeb.SessionLive.Entry do
   end
 
   defp get_character(character_map, character_id) do
-    case Map.get(character_map, character_id) do
-      %Character{} = c -> c
-      {:unavailable, other_id} -> {:unavailable, other_id}
-      {:fetching, other_id, query} -> {:fetching, other_id, query}
-      res when res in [nil, :not_found, :error] -> {:unavailable, character_id}
-    end
+    Map.get(character_map, character_id, %PendingCharacter{state: :unavailable, character_id: character_id})
   end
 
   # No more events to iterate
