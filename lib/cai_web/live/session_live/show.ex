@@ -11,7 +11,7 @@ defmodule CAIWeb.SessionLive.Show do
 
   alias CAI.Characters
   alias CAI.Characters.{Character, PendingCharacter, Session}
-  alias CAIWeb.SessionLive.{Blurbs, Entry}
+  alias CAIWeb.SessionLive.Blurbs
   alias CAIWeb.SessionLive.Show.Model
   alias Phoenix.PubSub
 

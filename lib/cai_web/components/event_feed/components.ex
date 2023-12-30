@@ -72,7 +72,7 @@ defmodule CAIWeb.EventFeed.Components do
   end
 
   # Out of Bounds
-  defp entry_content(%{event: %Death{character_id: char_id, attacker_character_id: 0}} = assigns) do
+  defp entry_content(%{event: %Death{character_id: char_id, attacker_character_id: 0}} = assigns) when char_id != 0 do
     ~H"""
     <.link_character
       character={@character}
