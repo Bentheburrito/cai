@@ -24,7 +24,7 @@ defmodule CAIWeb.SessionLive.Helpers do
   }
 
   alias CAI.Characters
-  alias CAIWeb.SessionLive.Entry
+  alias CAIWeb.SessionLive.{Blurbs, Entry}
   alias CAIWeb.SessionLive.Show.Model
 
   require Logger
@@ -120,7 +120,7 @@ defmodule CAIWeb.SessionLive.Helpers do
     if is_map_key(pending_groups, pending_key) do
       {:noreply, Model.update(socket, :pending_groups, &put_in(&1, [pending_key, :event], event))}
     else
-      Process.send_after(self(), {:build_entries, pending_key}, @event_pending_delay)
+      Process.send_after(self(), {:build_entries_from_group, pending_key}, @event_pending_delay)
       {:noreply, Model.update(socket, :pending_groups, &Map.put(&1, pending_key, %{event: event, bonuses: []}))}
     end
   end
@@ -134,7 +134,7 @@ defmodule CAIWeb.SessionLive.Helpers do
       updater = fn groups -> update_in(groups, [pending_key, :bonuses], &[event | &1]) end
       {:noreply, Model.update(socket, :pending_groups, updater)}
     else
-      Process.send_after(self(), {:build_entries, pending_key}, @event_pending_delay)
+      Process.send_after(self(), {:build_entries_from_group, pending_key}, @event_pending_delay)
       {:noreply, Model.update(socket, :pending_groups, &Map.put(&1, pending_key, %{event: nil, bonuses: [event]}))}
     end
   end
@@ -186,6 +186,135 @@ defmodule CAIWeb.SessionLive.Helpers do
          |> put_flash(:error, "Unable to load that session right now. Please try again")
          |> push_navigate(to: ~p"/sessions/#{character_id}")}
     end
+  end
+
+  def push_login_blurb(socket) do
+    with {:enabled, %Blurbs{} = blurbs} <- socket.assigns.model.blurbs,
+         {:ok, track_filename} <- Blurbs.get_random_blurb_filename("login", blurbs) do
+      push_event(socket, "play-blurb", %{"track" => track_filename})
+    else
+      _ -> socket
+    end
+  end
+
+  def bulk_append(events_to_stream, character, new_events_limit) do
+    liveview = self()
+
+    Task.start_link(fn ->
+      other_character_ids =
+        Stream.flat_map(
+          events_to_stream,
+          &(Map.take(&1, [:character_id, :attacker_character_id, :other_id]) |> Map.values())
+        )
+        |> MapSet.new()
+        |> MapSet.difference(MapSet.new([nil, 0, character.character_id]))
+
+      character_map = other_character_ids |> Characters.get_many() |> Map.put(character.character_id, character)
+
+      entries = Entry.map(events_to_stream, character_map)
+      send(liveview, {:bulk_append, entries, new_events_limit})
+    end)
+  end
+
+  def update_entries(entry, update_char_fn, socket) do
+    %{character_id: character_id} = socket.assigns.model.character
+
+    new_socket =
+      case entry.event do
+        %{character_id: ^character_id} ->
+          update_entry(socket, %Entry{entry | other: update_char_fn.(entry.other)})
+
+        _ ->
+          update_entry(socket, %Entry{entry | character: update_char_fn.(entry.character)})
+      end
+
+    new_socket
+  end
+
+  def update_aggregate(field, update_char_fn, socket) do
+    Model.update(socket, :aggregates, &update_in(&1, [field, :character], update_char_fn))
+  end
+
+  def build_entries_from_group({_, _, _, _} = pending_key, group, socket) do
+    character = socket.assigns.model.character
+
+    entries = Entry.from_groups(%{pending_key => group}, [], %{character.character_id => character})
+
+    {
+      :noreply,
+      socket
+      |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
+      |> stream(:events, entries, at: @prepend, limit: @events_limit)
+    }
+  end
+
+  def build_entries_from_group(pending_key, group, socket) do
+    character = socket.assigns.model.character
+    pending_queries = socket.assigns.model.pending_queries
+
+    group_event = Map.get_lazy(group, :event, fn -> group |> Map.get(:bonuses, []) |> List.first() end)
+    other_id = Helpers.get_other_character_id(character.character_id, group_event)
+
+    other =
+      other_id
+      |> Characters.fetch_async()
+      |> Entry.async_result_to_presentable_character(other_id)
+
+    character_map = %{character.character_id => character, other_id => other}
+    entries = Entry.from_groups(%{pending_key => group}, [], character_map)
+
+    labeled_entries = Enum.map(entries, &{:entry, &1})
+
+    pending_queries =
+      case other do
+        %{state: {:loading, query}} ->
+          Map.update(pending_queries, query, labeled_entries, &(labeled_entries ++ &1))
+
+        _ ->
+          pending_queries
+      end
+
+    {
+      :noreply,
+      socket
+      |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
+      |> Model.put(:pending_queries, pending_queries)
+      |> stream(:events, entries, at: @prepend, limit: @events_limit)
+    }
+  end
+
+  def update_entry(socket, entry) do
+    if event_to_dom_id(socket.assigns.model.last_entry) == event_to_dom_id(entry) do
+      Model.put(socket, :last_entry, entry)
+    else
+      socket
+    end
+    |> stream_insert(:events, entry, at: @append)
+  end
+
+  def refresh_aggregate_characters(socket) do
+    Enum.reduce(Session.aggregate_character_fields(), socket, fn field, socket ->
+      character_id = socket.assigns.model.aggregates[field].character.character_id
+      pending_queries = socket.assigns.model.pending_queries
+
+      character =
+        character_id
+        |> Characters.fetch_async()
+        |> Entry.async_result_to_presentable_character(character_id)
+
+      pending_queries =
+        case character do
+          %{state: {:loading, query}} ->
+            Map.update(pending_queries, query, [{:aggregate, field}], &[{:aggregate, field} | &1])
+
+          _ ->
+            pending_queries
+        end
+
+      socket
+      |> Model.put(:pending_queries, pending_queries)
+      |> Model.update(:aggregates, &put_in(&1, [field, :character], character))
+    end)
   end
 
   def event_to_dom_id(%Entry{event: event}) do

@@ -71,6 +71,18 @@ defmodule CAIWeb.EventFeed.Components do
     """
   end
 
+  # Out of Bounds
+  defp entry_content(%{event: %Death{character_id: char_id, attacker_character_id: 0}} = assigns) do
+    ~H"""
+    <.link_character
+      character={@character}
+      loadout_id={@event.character_loadout_id}
+      team_id={@event.team_id}
+      vehicle_id={@event.attacker_vehicle_id}
+    /> went somewhere they're not supposed to go
+    """
+  end
+
   defp entry_content(%{event: %Death{}} = assigns) do
     ~H"""
     <.link_character

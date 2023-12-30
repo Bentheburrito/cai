@@ -169,15 +169,7 @@ defmodule CAIWeb.SessionComponents do
 
   defp aggregate_fields, do: [{:nemesis, "died to"}, {:vanquished, "killed"}]
 
-  def get_weapon_name(0, 0) do
-    "a fall from a high place"
-  end
-
-  def get_weapon_name(0, _) do
-    "a blunt force"
-  end
-
-  def get_weapon_name(weapon_id, _) do
-    "#{CAI.get_weapon(weapon_id)["name"]}"
-  end
+  def get_weapon_name(0, 0), do: "a fall from a high place"
+  def get_weapon_name(0, _), do: "a blunt force"
+  def get_weapon_name(weapon_id, _), do: "#{CAI.get_weapon(weapon_id)["name"]}"
 end
