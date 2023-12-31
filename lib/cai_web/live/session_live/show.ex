@@ -83,7 +83,6 @@ defmodule CAIWeb.SessionLive.Show do
       # If the character is currently online, let's build the session so far
       online? = Helpers.online?(character.character_id, timestamps)
 
-      # TODO: clean this mess up.
       aggregates =
         with true <- online?,
              [{login, logout} | _] <- timestamps,

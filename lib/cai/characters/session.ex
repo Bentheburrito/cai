@@ -120,12 +120,13 @@ defmodule CAI.Characters.Session do
         do_build(character_id, changeset, login, logout)
 
       invalid_cs ->
-        bubbled_errors =
-          Ecto.Changeset.traverse_errors(invalid_cs, fn {msg, opts} ->
-            Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-              opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-            end)
+        replacer =
+          &Regex.replace(~r"%{(\w+)}", &1, fn _, key ->
+            &2 |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
           end)
+
+        bubbled_errors =
+          Ecto.Changeset.traverse_errors(invalid_cs, fn {msg, opts} -> replacer.(msg, opts) end)
 
         Logger.error("Could not build session: #{inspect(bubbled_errors)}")
 
