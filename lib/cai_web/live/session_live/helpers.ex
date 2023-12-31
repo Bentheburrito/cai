@@ -77,12 +77,10 @@ defmodule CAIWeb.SessionLive.Helpers do
     else
       %{character_id: character_id} = character = socket.assigns.model.character
 
-      other_id = Helpers.get_other_character_id(character_id, event)
-
       other =
-        other_id
-        |> Characters.fetch_async()
-        |> Entry.async_result_to_presentable_character(other_id)
+        character_id
+        |> Helpers.get_other_character_id(event)
+        |> Entry.async_fetch_presentable_character()
 
       entry =
         case event do
@@ -90,23 +88,11 @@ defmodule CAIWeb.SessionLive.Helpers do
           _ -> Entry.new(event, other, character)
         end
 
-      socket =
-        case other do
-          %{state: {:loading, query}} ->
-            Model.update(
-              socket,
-              :pending_queries,
-              &Map.update(&1, query, [{:entry, entry}], fn items -> [{:entry, entry} | items] end)
-            )
-
-          _ ->
-            socket
-        end
-
       {
         :noreply,
         socket
         |> stream_insert(:events, entry, at: @prepend, limit: @events_limit)
+        |> update_pending_queries(other, {:entry, entry})
         |> Model.put(:last_entry, entry)
       }
     end
@@ -237,7 +223,6 @@ defmodule CAIWeb.SessionLive.Helpers do
 
   def build_entries_from_group({_, _, _, _} = pending_key, group, socket) do
     character = socket.assigns.model.character
-
     entries = Entry.from_groups(%{pending_key => group}, [], %{character.character_id => character})
 
     {
@@ -250,35 +235,20 @@ defmodule CAIWeb.SessionLive.Helpers do
 
   def build_entries_from_group(pending_key, group, socket) do
     character = socket.assigns.model.character
-    pending_queries = socket.assigns.model.pending_queries
 
     group_event = Map.get_lazy(group, :event, fn -> group |> Map.get(:bonuses, []) |> List.first() end)
     other_id = Helpers.get_other_character_id(character.character_id, group_event)
-
-    other =
-      other_id
-      |> Characters.fetch_async()
-      |> Entry.async_result_to_presentable_character(other_id)
+    other = Entry.async_fetch_presentable_character(other_id)
 
     character_map = %{character.character_id => character, other_id => other}
     entries = Entry.from_groups(%{pending_key => group}, [], character_map)
-
     labeled_entries = Enum.map(entries, &{:entry, &1})
-
-    pending_queries =
-      case other do
-        %{state: {:loading, query}} ->
-          Map.update(pending_queries, query, labeled_entries, &(labeled_entries ++ &1))
-
-        _ ->
-          pending_queries
-      end
 
     {
       :noreply,
       socket
       |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
-      |> Model.put(:pending_queries, pending_queries)
+      |> update_pending_queries(other, labeled_entries)
       |> stream(:events, entries, at: @prepend, limit: @events_limit)
     }
   end
@@ -294,25 +264,10 @@ defmodule CAIWeb.SessionLive.Helpers do
 
   def refresh_aggregate_characters(socket) do
     Enum.reduce(Session.aggregate_character_fields(), socket, fn field, socket ->
-      character_id = socket.assigns.model.aggregates[field].character.character_id
-      pending_queries = socket.assigns.model.pending_queries
-
-      character =
-        character_id
-        |> Characters.fetch_async()
-        |> Entry.async_result_to_presentable_character(character_id)
-
-      pending_queries =
-        case character do
-          %{state: {:loading, query}} ->
-            Map.update(pending_queries, query, [{:aggregate, field}], &[{:aggregate, field} | &1])
-
-          _ ->
-            pending_queries
-        end
+      character = Entry.async_fetch_presentable_character(socket.assigns.model.aggregates[field].character.character_id)
 
       socket
-      |> Model.put(:pending_queries, pending_queries)
+      |> update_pending_queries(character, {:aggregate, field})
       |> Model.update(:aggregates, &put_in(&1, [field, :character], character))
     end)
   end
@@ -332,4 +287,21 @@ defmodule CAIWeb.SessionLive.Helpers do
   defp group_key(%PlayerFacilityCapture{} = cap), do: {cap.timestamp, cap.world_id, cap.zone_id, cap.facility_id}
   defp group_key(%PlayerFacilityDefend{} = def), do: {def.timestamp, def.world_id, def.zone_id, def.facility_id}
   defp group_key(%FacilityControl{} = def), do: {def.timestamp, def.world_id, def.zone_id, def.facility_id}
+
+  defp update_pending_queries(socket, character, item_to_update) when not is_list(item_to_update),
+    do: update_pending_queries(socket, character, [item_to_update])
+
+  defp update_pending_queries(socket, character, items_to_update) do
+    case character do
+      %{state: {:loading, query}} ->
+        Model.update(
+          socket,
+          :pending_queries,
+          &Map.update(&1, query, items_to_update, fn items -> items_to_update ++ items end)
+        )
+
+      _ ->
+        socket
+    end
+  end
 end

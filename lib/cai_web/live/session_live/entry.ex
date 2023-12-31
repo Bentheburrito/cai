@@ -70,12 +70,12 @@ defmodule CAIWeb.SessionLive.Entry do
   end
 
   @doc """
-  Given an async fetch result and a character ID, returns the corresponding `t:presentable_character()`
+  Fetches a character asynchronously, and returns either the cached `Character` struct or a `PendingCharacter` struct
+  with the corresponding state.
   """
-  @spec async_result_to_presentable_character(Characters.character_async_result(), Characters.character_id()) ::
-          presentable_character()
-  def async_result_to_presentable_character(fetch_result, character_id) do
-    case fetch_result do
+  @spec async_fetch_presentable_character(Characters.character_id()) :: presentable_character()
+  def async_fetch_presentable_character(character_id) do
+    case Characters.fetch_async(character_id) do
       {:ok, character} -> character
       {:fetching, query} -> %PendingCharacter{state: {:loading, query}, character_id: character_id}
       :not_found -> %PendingCharacter{state: :unavailable, character_id: character_id}
