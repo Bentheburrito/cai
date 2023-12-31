@@ -145,7 +145,7 @@ defmodule CAIWeb.SessionLiveTest do
         }
       ]
 
-      entries = Entry.map(event_history, [character])
+      entries = Entry.map(event_history, %{character.character_id => character})
 
       assert 3 == length(entries)
 

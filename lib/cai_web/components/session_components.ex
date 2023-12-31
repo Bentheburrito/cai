@@ -1,4 +1,4 @@
-defmodule CAIWeb.EventFeed.Utils do
+defmodule CAIWeb.SessionComponents do
   @moduledoc """
   Helper/util functions for EventFeed.Components
   """
@@ -39,35 +39,45 @@ defmodule CAIWeb.EventFeed.Utils do
   attr(:loadout_id, :integer, default: 0)
   attr(:team_id, :integer, default: 0)
   attr(:possessive?, :boolean, default: false)
+  attr(:prepend, :string, default: "")
 
-  def link_character(%{character: {:being_fetched, _other_id, _query}} = assigns) do
+  def link_character(%{character: %{state: {:loading, _}}} = assigns) do
     ~H"""
-    <.link navigate={~p"/sessions/#{elem(@character, 1)}"} class="rounded pl-1 pr-1 mr-1 bg-gray-800 hover:text-gray-400">
+    <.link
+      navigate={~p"/sessions/#{@character.character_id}"}
+      class="rounded pl-1 pr-1 mr-1 bg-gray-800 hover:text-gray-400"
+    >
       <.vehicle_icon vehicle_id={@vehicle_id} character_name="[Loading...]" />
       <.loadout_icon loadout_id={@loadout_id} /> Loading name...
     </.link>
     """
   end
 
-  def link_character(%{character: {:unavailable, 0}} = assigns), do: ~H"someone or something"
+  def link_character(%{character: %{state: :unavailable, character_id: 0}} = assigns), do: ~H""
 
-  def link_character(%{character: {:unavailable, character_id}} = assigns) when is_character_id(character_id) do
+  def link_character(%{character: %{state: :unavailable, character_id: id}} = assigns) when is_character_id(id) do
     ~H"""
-    <.link navigate={~p"/sessions/#{elem(@character, 1)}"} class="rounded pl-1 pr-1 mr-1 bg-gray-800 hover:text-gray-400">
+    <%= @prepend %>
+    <.link
+      navigate={~p"/sessions/#{@character.character_id}"}
+      class="rounded pl-1 pr-1 mr-1 bg-gray-800 hover:text-gray-400"
+    >
       <.vehicle_icon vehicle_id={@vehicle_id} character_name="[Name Unavailable]" />
       <.loadout_icon loadout_id={@loadout_id} /> [Name Unavailable] <%= (@possessive? && "'s") || "" %>
     </.link>
     """
   end
 
-  def link_character(%{character: {:unavailable, _}} = assigns) do
+  def link_character(%{character: %{state: :unavailable}} = assigns) do
     ~H"""
-    <span title={"NPC ID #{elem(@character, 1)}"}>a vehicle</span>
+    <%= @prepend %>
+    <span title={"NPC ID #{@character.character_id}"}>a vehicle</span>
     """
   end
 
   def link_character(%{character: %Character{}} = assigns) do
     ~H"""
+    <%= @prepend %>
     <.link
       navigate={~p"/sessions/#{@character.character_id}"}
       class={"rounded pl-1 pr-1 mr-1 #{Utils.faction_css_classes(@character.faction_id, @team_id)}"}
@@ -147,15 +157,19 @@ defmodule CAIWeb.EventFeed.Utils do
     """
   end
 
-  def get_weapon_name(0, 0) do
-    "a fall from a high place"
+  def link_aggregates(assigns) do
+    ~H"""
+    <%= for {aggregate, value_descriptor} <- aggregate_fields(), @aggregates[aggregate].character.character_id != 0 do %>
+      <%= aggregate |> Atom.to_string() |> String.capitalize() %>:
+      <.link_character character={@aggregates[aggregate].character} />
+      (<%= value_descriptor %> <%= @aggregates[aggregate].value %> times) <br />
+    <% end %>
+    """
   end
 
-  def get_weapon_name(0, _) do
-    "a blunt force"
-  end
+  defp aggregate_fields, do: [{:nemesis, "died to"}, {:vanquished, "killed"}]
 
-  def get_weapon_name(weapon_id, _) do
-    "#{CAI.get_weapon(weapon_id)["name"]}"
-  end
+  def get_weapon_name(0, 0), do: "a fall from a high place"
+  def get_weapon_name(0, _), do: "a blunt force"
+  def get_weapon_name(weapon_id, _), do: "#{CAI.get_weapon(weapon_id)["name"]}"
 end

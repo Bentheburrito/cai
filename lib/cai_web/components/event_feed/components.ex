@@ -11,7 +11,7 @@ defmodule CAIWeb.EventFeed.Components do
 
   import CAI.Guards, only: [is_revive_xp: 1, is_assist_xp: 1, is_gunner_assist_xp: 1]
   import CAIWeb.CoreComponents, only: [hover_timestamp: 1]
-  import CAIWeb.EventFeed.Utils
+  import CAIWeb.SessionComponents
 
   alias CAI.Characters.Outfit
 
@@ -68,6 +68,18 @@ defmodule CAIWeb.EventFeed.Components do
       team_id={@event.team_id}
       vehicle_id={@event.attacker_vehicle_id}
     /> died of their own accord with <%= get_weapon_name(@event.attacker_weapon_id, @event.attacker_vehicle_id) %>
+    """
+  end
+
+  # Out of Bounds
+  defp entry_content(%{event: %Death{character_id: char_id, attacker_character_id: 0}} = assigns) when char_id != 0 do
+    ~H"""
+    <.link_character
+      character={@character}
+      loadout_id={@event.character_loadout_id}
+      team_id={@event.team_id}
+      vehicle_id={@event.attacker_vehicle_id}
+    /> went somewhere they're not supposed to go
     """
   end
 
@@ -225,7 +237,7 @@ defmodule CAIWeb.EventFeed.Components do
     <.link_character character={@character} team_id={@event.team_id} loadout_id={@event.loadout_id} />
     gained <%= @event.amount %>
     <span title={"XP ID: #{@event.experience_id}"}><%= CAI.get_xp(@event.experience_id)["description"] %> XP</span>
-    via <.link_character character={@other} />
+    <.link_character character={@other} prepend="via" />
     """
   end
 

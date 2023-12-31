@@ -19,10 +19,7 @@ defmodule CAI.Census do
   defstruct pending: %{},
             failed: %{},
             fail_count: 0,
-            # open_into: nil,
             transformers: %{}
-
-  # @type query_result :: {:ok, Character.t()} | :not_found | :error
 
   ### CONSTANTS
 
@@ -67,14 +64,13 @@ defmodule CAI.Census do
   ### IMPL
 
   @impl :gen_statem
-  def callback_mode, do: [:state_functions, :state_enter]
+  def callback_mode, do: :state_functions
 
   @impl :gen_statem
   def init(transformers) do
     {:ok, :opened, %__MODULE__{transformers: transformers}}
   end
 
-  def opened(:enter, _old_state, state), do: {:keep_state, state}
   def opened(:cast, {:fetch, from, query}, %__MODULE__{} = state), do: {:keep_state, handle_request(state, from, query)}
   def opened(:info, {:fetch_complete, query, {:ok, _} = result}, state), do: handle_result(state, query, result)
   def opened(:info, {:fetch_complete, query, :not_found}, state), do: handle_result(state, query, :not_found)
@@ -114,15 +110,16 @@ defmodule CAI.Census do
     {:keep_state, state}
   end
 
-  def slowed(:enter, _old_state, %__MODULE__{fail_count: 0} = state), do: {:next_state, :opened, state}
-  def slowed(:enter, _old_state, state), do: {:keep_state, state}
-
   def slowed(:cast, {:fetch, from, query}, %__MODULE__{} = state) do
-    Logger.info("handling request in :slowed, transitioning to :closed for #{@slowed_period_ms}ms")
-
     state = handle_request(state, from, query)
 
-    {:next_state, :closed, state, [{:state_timeout, @slowed_period_ms, :slowed}]}
+    if state.fail_count == 0 do
+      Logger.info("handling request in :slowed, but fail_count == 0, so transitioning to :opened")
+      {:next_state, :opened, state}
+    else
+      Logger.info("handling request in :slowed, transitioning to :closed for #{@slowed_period_ms}ms")
+      {:next_state, :closed, state, [{:state_timeout, @slowed_period_ms, :slowed}]}
+    end
   end
 
   # successful query
@@ -179,7 +176,6 @@ defmodule CAI.Census do
     {:keep_state, state}
   end
 
-  def closed(:enter, _old_state, state), do: {:keep_state, state}
   def closed(:state_timeout, {:fail_count, n}, state), do: {:next_state, :slowed, %__MODULE__{state | fail_count: n}}
   def closed(:state_timeout, old_state, %__MODULE__{} = state), do: {:next_state, old_state, state}
   def closed(:cast, {:fetch, _from, _query}, state), do: {:keep_state, state, [:postpone]}

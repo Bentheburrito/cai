@@ -31,7 +31,7 @@ defmodule CAI.Characters do
   @type character_id :: integer()
   @type character_name :: String.t()
   @type character_reference :: character_name | character_id
-  @type character_fetch_result :: {:ok, Character.t()} | :not_found | :error
+  @type character_fetch_result :: {:ok, Character.t()} | :not_found | {:error, :timeout | :bad_character_ref | map()}
   @type character_async_result :: character_fetch_result() | {:fetching, Query.t()}
 
   @cache_ttl_ms 12 * 60 * 60 * 1000
@@ -126,7 +126,7 @@ defmodule CAI.Characters do
   end
 
   defp do_fetch(_non_character_id, _fallback_fn) do
-    :error
+    {:error, :bad_character_ref}
   end
 
   # (TODO): make behaviour for these transformers
@@ -222,10 +222,10 @@ defmodule CAI.Characters do
           |> term("character_id", uncached_ids)
           |> Census.fetch()
 
-        characters = List.wrap(characters)
-
         new_character_map =
-          Map.new(characters, &{&1.character_id, &1})
+          characters
+          |> List.wrap()
+          |> Map.new(&{&1.character_id, &1})
 
         # Must merge this way, since map2 key values override map1's
         Map.merge(character_map, new_character_map)
@@ -343,8 +343,8 @@ defmodule CAI.Characters do
       :not_found ->
         :not_found
 
-      :error ->
-        Logger.error("get_session_boundaries/2 failed to fetch character, #{character_name}")
+      {:error, error} ->
+        Logger.error("get_session_boundaries/2 failed to fetch character, #{character_name}: #{inspect(error)}")
         :error
     end
   end

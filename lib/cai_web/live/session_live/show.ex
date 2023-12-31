@@ -2,6 +2,7 @@ defmodule CAIWeb.SessionLive.Show do
   use CAIWeb, :live_view
 
   import CAIWeb.EventFeed
+  import CAIWeb.SessionComponents
   import CAIWeb.Utils
   import CAIWeb.SessionLive.Helpers
   import Phoenix.Component, only: []
@@ -9,9 +10,8 @@ defmodule CAIWeb.SessionLive.Show do
   alias CAI.ESS.{Helpers, PlayerLogout}
 
   alias CAI.Characters
-  alias CAI.Characters.Character
-  alias CAI.Characters.Session
-  alias CAIWeb.SessionLive.{Blurbs, Entry}
+  alias CAI.Characters.{Character, PendingCharacter, Session}
+  alias CAIWeb.SessionLive.Blurbs
   alias CAIWeb.SessionLive.Show.Model
   alias Phoenix.PubSub
 
@@ -40,8 +40,7 @@ defmodule CAIWeb.SessionLive.Show do
     with {:ok, login} <- parse_int_param(login, socket),
          {:ok, logout} <- parse_int_param(logout, socket),
          {:ok, %Character{} = character} <- get_character(character_id, socket),
-         {:ok, session} <- Session.build(character.character_id, login, logout),
-         {:ok, event_history} <- get_session_history(character.character_id, login, logout, socket) do
+         {:ok, session, event_history} <- get_session_history(character.character_id, login, logout, socket) do
       {init_events, remaining_events, new_limit} = split_events_while(event_history, @events_limit)
 
       bulk_append(init_events, character, new_limit)
@@ -51,8 +50,9 @@ defmodule CAIWeb.SessionLive.Show do
         socket
         |> stream(:events, [], reset: true, at: @append, limit: @events_limit)
         |> Model.put(
-          aggregates: Map.take(session, Session.aggregate_fields()),
+          aggregates: Session.take_aggregates(session),
           character: character,
+          duration_mins: Float.round((logout - login) / 60, 2),
           live?: false,
           loading_more?: true,
           page_title: "#{character.name_first}'s Previous Session",
@@ -60,30 +60,8 @@ defmodule CAIWeb.SessionLive.Show do
           login: login,
           logout: logout
         )
+        |> refresh_aggregate_characters()
       }
-    else
-      {:error, changeset} ->
-        bubbled_errors =
-          Ecto.Changeset.traverse_errors(changeset, fn {msg, opts} ->
-            Regex.replace(~r"%{(\w+)}", msg, fn _, key ->
-              opts |> Keyword.get(String.to_existing_atom(key), key) |> to_string()
-            end)
-          end)
-
-        Logger.error("Could not build session: #{inspect(bubbled_errors)}")
-
-        {
-          :noreply,
-          socket
-          |> put_flash(
-            :error,
-            "Something went wrong opening that character's session, please try again. #{CAI.please_report_msg()}"
-          )
-          |> push_navigate(to: ~p"/sessions/#{character_id}")
-        }
-
-      {:noreply, socket} ->
-        {:noreply, socket}
     end
   end
 
@@ -108,32 +86,14 @@ defmodule CAIWeb.SessionLive.Show do
       aggregates =
         with true <- online?,
              [{login, logout} | _] <- timestamps,
-             {:ok, session} <- Session.build(character.character_id, login, logout),
-             {:ok, event_history} <- get_session_history(character.character_id, login, logout, socket) do
+             {:ok, session, event_history} <- get_session_history(character.character_id, login, logout, socket) do
           {init_events, _remaining_events, new_limit} = split_events_while(event_history, @events_limit)
 
           bulk_append(init_events, character, new_limit)
 
-          Map.take(session, Session.aggregate_fields())
+          Session.take_aggregates(session)
         else
-          false ->
-            Map.new(Session.aggregate_fields(), &{&1, 0})
-
-          {:error, changeset} ->
-            Logger.error("Could not build a session handling live session params: #{inspect(changeset)}")
-            Map.new(Session.aggregate_fields(), &{&1, 0})
-
-          [] ->
-            Logger.error("""
-            Tried to match `[{login, logout} | _]` from `timestamps = #{inspect(timestamps)}`, but got an empty list.
-            #{character.name_first} (#{character.character_id}) was confirmed online, so there should have been at least one boundary pair:
-            #{online?} = Helpers.online?(#{character.character_id}, #{inspect(timestamps)})
-            """)
-
-            Map.new(Session.aggregate_fields(), &{&1, 0})
-
-          {:noreply, _socket} ->
-            Map.new(Session.aggregate_fields(), &{&1, 0})
+          _ -> Session.take_aggregates()
         end
 
       {login, logout} =
@@ -157,6 +117,7 @@ defmodule CAIWeb.SessionLive.Show do
           login: login,
           logout: logout
         )
+        |> refresh_aggregate_characters()
       }
     end
   end
@@ -179,7 +140,8 @@ defmodule CAIWeb.SessionLive.Show do
         new_events_limit = socket.assigns.model.events_limit + events_limit
         bulk_append(events_to_stream, socket.assigns.model.character, new_events_limit)
 
-        {:noreply, Model.put(socket, remaining_events: remaining_events, loading_more?: true)}
+        {:noreply,
+         socket |> Model.put(remaining_events: remaining_events, loading_more?: true) |> refresh_aggregate_characters()}
     end
   end
 
@@ -249,24 +211,6 @@ defmodule CAIWeb.SessionLive.Show do
     }
   end
 
-  defp push_login_blurb(socket) do
-    with {:enabled, %Blurbs{} = blurbs} <- socket.assigns.model.blurbs,
-         {:ok, track_filename} <- Blurbs.get_random_blurb_filename("login", blurbs) do
-      push_event(socket, "play-blurb", %{"track" => track_filename})
-    else
-      _ -> socket
-    end
-  end
-
-  defp bulk_append(events_to_stream, character, new_events_limit) do
-    liveview = self()
-
-    Task.start_link(fn ->
-      entries = Entry.map(events_to_stream, [character])
-      send(liveview, {:bulk_append, entries, new_events_limit})
-    end)
-  end
-
   # Historic Session - bulk insert the given event tuples
   @impl true
   def handle_info({:bulk_append, entries, new_events_limit}, socket) do
@@ -291,18 +235,20 @@ defmodule CAIWeb.SessionLive.Show do
     socket = Model.put(socket, aggregates: aggregates, logout: logout)
     socket = Blurbs.maybe_push_blurb(event, socket)
 
-    handle_ess_event(event, socket)
+    socket
+    |> refresh_aggregate_characters()
+    |> handle_ess_event(event)
   end
 
   # Live Session - we've waited long enough to receive a primary event and any bonuses, so combine them into an Entry.
   @impl true
-  def handle_info({:build_entries, pending_key}, socket) do
+  def handle_info({:build_entries_from_group, pending_key}, socket) do
     case Map.fetch(socket.assigns.model.pending_groups, pending_key) do
       {:ok, group} ->
-        build_entries(pending_key, group, socket)
+        build_entries_from_group(pending_key, group, socket)
 
       :error ->
-        Logger.error("Received :build_entries message, but no group was found under #{inspect(pending_key)}")
+        Logger.error("Received :build_entries_from_group message, but no group was found under #{inspect(pending_key)}")
         {:noreply, socket}
     end
   end
@@ -311,13 +257,7 @@ defmodule CAIWeb.SessionLive.Show do
   @impl true
   def handle_info(:time_update, socket) do
     last_entry = socket.assigns.model.last_entry
-
-    last_event =
-      if is_nil(last_entry) do
-        nil
-      else
-        last_entry.event
-      end
+    last_event = if is_nil(last_entry), do: nil, else: last_entry.event
 
     if Helpers.online?(last_event) do
       login = socket.assigns.model.login
@@ -334,86 +274,21 @@ defmodule CAIWeb.SessionLive.Show do
 
   @impl true
   def handle_info({:fetch, query, result}, socket) do
-    {entries, new_pending_queries} = Map.pop(socket.assigns.model.pending_queries, query, [])
+    {to_update, new_pending_queries} = Map.pop(socket.assigns.model.pending_queries, query, [])
     socket = Model.put(socket, :pending_queries, new_pending_queries)
 
-    {new_character, character_id} =
+    update_char_fn =
       case result do
-        {:ok, %Character{} = character} ->
-          {character, character.character_id}
-
-        _ ->
-          character_id = elem(query.params["character_id"], 1)
-          {{:unavailable, character_id}, character_id}
+        {:ok, character} -> fn _c -> character end
+        _ -> fn old_pc -> %PendingCharacter{old_pc | state: :unavailable} end
       end
 
-    new_socket =
-      for entry <- entries, reduce: socket do
-        socket ->
-          case entry.event do
-            %{character_id: ^character_id} ->
-              update_entry(socket, %Entry{entry | character: new_character})
-
-            _ ->
-              update_entry(socket, %Entry{entry | other: new_character})
-          end
-      end
-
-    {:noreply, new_socket}
-  end
-
-  defp build_entries({_, _, _, _} = pending_key, group, socket) do
-    character = socket.assigns.model.character
-
-    entries = Entry.from_groups(%{pending_key => group}, [], %{character.character_id => character})
-
-    {
-      :noreply,
-      socket
-      |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
-      |> stream(:events, entries, at: @prepend, limit: @events_limit)
-    }
-  end
-
-  defp build_entries(pending_key, group, socket) do
-    character = socket.assigns.model.character
-    pending_queries = socket.assigns.model.pending_queries
-
-    group_event = Map.get_lazy(group, :event, fn -> group |> Map.get(:bonuses, []) |> List.first() end)
-    other = Helpers.get_other_character(character.character_id, group_event, &Characters.fetch_async/1)
-
-    other_id =
-      case other do
-        %Character{character_id: id} -> id
-        {_, id} -> id
-        {_, id, _} -> id
-        :none -> nil
-      end
-
-    character_map = %{character.character_id => character, other_id => other}
-    entries = Entry.from_groups(%{pending_key => group}, [], character_map)
-
-    pending_queries =
-      Enum.reduce(character_map, pending_queries, fn
-        {_, {:being_fetched, _other_id, query}}, acc -> Map.update(acc, query, entries, &(entries ++ &1))
-        _, acc -> acc
-      end)
-
-    {
-      :noreply,
-      socket
-      |> Model.update(:pending_groups, &Map.delete(&1, pending_key))
-      |> Model.put(:pending_queries, pending_queries)
-      |> stream(:events, entries, at: @prepend, limit: @events_limit)
-    }
-  end
-
-  defp update_entry(socket, entry) do
-    if event_to_dom_id(socket.assigns.model.last_entry) == event_to_dom_id(entry) do
-      Model.put(socket, :last_entry, entry)
-    else
-      socket
-    end
-    |> stream_insert(:events, entry, at: @append)
+    {:noreply,
+     Enum.reduce(to_update, socket, fn item, socket ->
+       case item do
+         {:entry, entries} -> update_entries(entries, update_char_fn, socket)
+         {:aggregate, aggregate} -> update_aggregate(aggregate, update_char_fn, socket)
+       end
+     end)}
   end
 end

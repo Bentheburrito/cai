@@ -10,9 +10,17 @@
   <div :if={@model.character} class="flex flex-col justify-between">
     <h3 class="m-2">
       <%= if @model.logout != :offline do %>
-        Session from <.timestamp id="session-login" unix_timestamp={@model.login} class="font-bold" /> to
-        <.timestamp id="session-logout" unix_timestamp={@model.logout} class="font-bold" />
-        <br /> Lasted <span class="font-bold"><%= format_duration(@model.login, @model.logout) %></span>
+        <div class="flex justify-between">
+          <div class="text-right mr-1">
+            Session from <br /> to
+          </div>
+          <div>
+            <.timestamp id="session-login" unix_timestamp={@model.login} class="font-bold" />
+            <br />
+            <.timestamp id="session-logout" unix_timestamp={@model.logout} class="font-bold" />
+          </div>
+        </div>
+        Lasted <span class="font-bold"><%= format_duration(@model.login, @model.logout) %></span>
       <% else %>
         <%= @model.character.name_first %> is offline.
       <% end %>
@@ -92,7 +100,7 @@
         <td class="p-1 pl-2"><%= @model.aggregates.kill_ivi_count %></td>
       </tr>
       <tr>
-        <td class="p-1 pl-2 border-r">Headshots</td>
+        <td class="p-1 pl-2 border-r">HS Kills</td>
         <td class="p-1 pl-2"><%= @model.aggregates.kill_hs_count %></td>
         <td class="p-1 pl-2"><%= @model.aggregates.kill_hs_ivi_count %></td>
       </tr>
@@ -132,7 +140,7 @@
         </td>
       </tr>
       <tr>
-        <td class="p-1 pl-2 border-r" title="Headshot Ratio">HSR</td>
+        <td class="p-1 pl-2 border-r" title="Headshot Kill Ratio">HSKR</td>
         <td
           class="p-1 pl-2"
           title={"# headshot kills / # total kills => #{@model.aggregates.kill_hs_count} / #{@model.aggregates.kill_count}"}
@@ -191,7 +199,9 @@
       </tr>
     </table>
     <div class="flex-col ml-4">
-      XP Earned: <%= @model.aggregates.xp_earned %> <br /> Revive Count: <%= @model.aggregates.revive_count %> <br />
+      XP Earned: <%= @model.aggregates.xp_earned %> <br /> Teammates Revived: <%= @model.aggregates.revive_count %>
+      <br /> Times Revived: <%= @model.aggregates.revived_by_count %><br />
+      <.link_aggregates aggregates={@model.aggregates} />
       <br />
       Note: you can hover over some headers to see a more descriptive title, or hover over certain cells to see how they're calculated
     </div>
