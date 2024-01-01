@@ -1,4 +1,5 @@
 defmodule CAIWeb.SessionLive.List do
+  alias CAIWeb.SessionLive
   use CAIWeb, :live_view
 
   import CAIWeb.Utils
@@ -12,7 +13,10 @@ defmodule CAIWeb.SessionLive.List do
 
   @impl true
   def mount(_params, _session, socket) do
-    {:ok, stream_configure(socket, :sessions, dom_id: &boundary_tuple_to_dom_id/1)}
+    {:ok,
+     socket
+     |> stream_configure(:sessions, dom_id: &boundary_tuple_to_dom_id/1)
+     |> assign(:pinned, :loading)}
   end
 
   @impl true
@@ -37,6 +41,33 @@ defmodule CAIWeb.SessionLive.List do
         |> assign(:online?, Helpers.online?(character.character_id, timestamps))
       }
     end
+  end
+
+  @impl true
+  def handle_event("toggle-pin-status", _unsigned_params, %{assigns: %{pinned: :loading}} = socket),
+    do: {:noreply, socket}
+
+  @impl true
+  def handle_event("toggle-pin-status", _unsigned_params, socket) do
+    character_id = socket.assigns.character.character_id
+    pinned = socket.assigns.pinned
+
+    new_pinned =
+      if is_map_key(pinned, character_id) do
+        Map.delete(pinned, character_id)
+      else
+        Map.put(pinned, character_id, :present)
+      end
+
+    {:noreply,
+     socket
+     |> assign(:pinned, new_pinned)
+     |> push_event("set-pinned", %{"pinned" => new_pinned |> Map.keys() |> Enum.join(",")})}
+  end
+
+  @impl true
+  def handle_event("set-pinned", %{"pinned" => idstr}, socket) do
+    {:noreply, assign(socket, :pinned, SessionLive.parse_id_str(idstr))}
   end
 
   @impl true

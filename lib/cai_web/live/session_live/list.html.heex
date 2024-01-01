@@ -2,6 +2,23 @@
 
 <.character_header character={assigns[:character]} />
 
+<.button
+  id="toggle-pin-character-button"
+  disabled={@pinned == :loading}
+  class="border-solid border-2 m-1 rounded-xl border-gray-400"
+  phx-click="toggle-pin-status"
+  phx-hook="PinButton"
+>
+  <%= cond do %>
+    <% @pinned == :loading -> %>
+      🔄 Loading...
+    <% is_map_key(@pinned, @character.character_id) -> %>
+      🚫 Unpin Character
+    <% :else -> %>
+      📌 Pin Character
+  <% end %>
+</.button>
+
 <div :if={assigns[:streams][:sessions]}>
   <.button
     :if={@online?}
