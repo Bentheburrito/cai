@@ -98,7 +98,7 @@ defmodule CAIWeb.SessionLive do
 
       online_statuses =
         Map.new(character_ids, fn id ->
-          # TODO - if this leads to DB performance issues for users w/ lots of pinned chars, consider adding a
+          # If this leads to DB performance issues for users w/ lots of pinned chars, consider adding a
           # `:latest_events_by_character_id` cache.
           online? = id |> Characters.get_latest_event() |> Helpers.online?()
           {id, (online? && :online) || :offline}
