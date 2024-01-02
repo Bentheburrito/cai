@@ -100,6 +100,15 @@ const Hooks = {
         console.log(`Set to ${value}`)
       });
     }
+  },
+  PinButton: {
+    mounted () {
+      let cookies = document.cookie;
+      let pinned = cookies.split(';').find(cookie_pairs => cookie_pairs.trim().startsWith('pinned='))?.split('=')[1] || '';
+
+      this.pushEvent("set-pinned", { pinned })
+      this.handleEvent("set-pinned", ({ pinned: new_pinned }) => document.cookie = `pinned=${new_pinned};path=/;samesite=lax`);
+    },
   }
 };
 

@@ -7,7 +7,7 @@ defmodule CAI.Characters do
   import CAI.Cachex
   import CAI.Guards, only: [is_character_id: 1]
   import Ecto.Query, warn: false
-  import PS2.API.QueryBuilder, except: [field: 2]
+  import PS2.API.QueryBuilder, except: [field: 2, limit: 2]
 
   alias CAI.Census
   alias CAI.Characters.{Character, Outfit, Session}
@@ -330,6 +330,13 @@ defmodule CAI.Characters do
     |> Enum.sort_by(& &1.timestamp, :desc)
   end
 
+  def get_latest_event(character_id) when is_character_id(character_id) do
+    character_id
+    |> event_types_and_timestamps_query()
+    |> limit(1)
+    |> Repo.one()
+  end
+
   @default_session_count 10
   @spec get_session_boundaries(character_reference(), max_sessions :: integer()) ::
           {:ok, character_id, [{integer(), integer()}]} | :not_found | :error
@@ -400,6 +407,12 @@ defmodule CAI.Characters do
   defp session_boundary?(_, _, ts1, ts2), do: ts2 - ts1 > @session_boundary_secs
 
   defp list_all_timestamps(character_id) do
+    character_id
+    |> event_types_and_timestamps_query()
+    |> Repo.all()
+  end
+
+  defp event_types_and_timestamps_query(character_id) do
     init_query =
       from(ge in GainExperience,
         select: %{timestamp: ge.timestamp, type: "ge"},
@@ -425,6 +438,5 @@ defmodule CAI.Characters do
     end)
     |> subquery()
     |> order_by(desc: :timestamp)
-    |> Repo.all()
   end
 end

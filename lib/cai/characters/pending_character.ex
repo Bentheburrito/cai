@@ -13,9 +13,14 @@ defmodule CAI.Characters.PendingCharacter do
   @type t() :: %__MODULE__{
           character_id: integer(),
           name_first: String.t(),
+          name_first_lower: String.t(),
           faction_id: integer(),
           state: {:loading, Query.t()} | :unavailable
         }
   @enforce_keys [:state]
-  defstruct character_id: 0, name_first: "[Name Unavailable]", faction_id: 0, state: :unavailable
+  defstruct character_id: 0,
+            name_first: "[Name Unavailable]",
+            name_first_lower: "[name unavailable]",
+            faction_id: 0,
+            state: :unavailable
 end
