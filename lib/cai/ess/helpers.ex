@@ -40,9 +40,7 @@ defmodule CAI.ESS.Helpers do
   Checks the DB with `Repo.exists?/1`
   """
   @spec online?(Characters.character_id(), [{integer(), integer()}]) :: boolean()
-  def online?(character_id, timestamps) do
-    # first element of timestamps list, 2nd element of the tuple is the logout timestamp
-    latest_timestamp = get_in(timestamps, [Access.at(0), Access.elem(1)]) || 0
+  def online?(character_id, [{_, latest_timestamp} | _]) do
     recent? = latest_timestamp > :os.system_time(:second) - Characters.Session.session_timeout_mins() * 60
 
     logout? =
@@ -54,6 +52,11 @@ defmodule CAI.ESS.Helpers do
     recent? and not logout?
   end
 
+  def online?(character_id, _timestamps) do
+    Logger.info("ESS.Helpers.online?/2: Empty timestamps list, returning `false` for #{character_id}")
+    false
+  end
+
   @doc """
   Given a character's last known event, determine if the character is currently online.
 
@@ -63,6 +66,8 @@ defmodule CAI.ESS.Helpers do
   def online?(last_event) do
     case last_event do
       %PlayerLogout{} -> false
+      # this comes from the fn `Characters.get_latest_event/1`
+      %{type: "logout"} -> false
       nil -> false
       %{timestamp: timestamp} -> timestamp > :os.system_time(:second) - Characters.Session.session_timeout_mins() * 60
     end

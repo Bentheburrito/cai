@@ -1,17 +1,19 @@
 defmodule CAIWeb.SessionLive do
+  alias CAI.ESS.Helpers
   use CAIWeb, :live_view
 
   import CAIWeb.SessionComponents
 
   alias CAI.Characters
   alias CAI.Characters.{Character, PendingCharacter}
+  alias CAI.ESS.PlayerLogout
 
   require Logger
 
   @impl true
   def render(assigns) do
     ~H"""
-    <h3>Search for a character to see their current and previous sessions</h3>
+    <.header>Search for a character to see their current and previous sessions</.header>
     <form phx-change="validate" phx-submit="search">
       <.input
         placeholder="Type a character name or ID here"
@@ -26,10 +28,33 @@ defmodule CAIWeb.SessionLive do
       <.button class="mt-2 bg-gray-800">Search</.button>
     </form>
 
-    <h3>Pinned Characters</h3>
+    <.header>Pinned Characters</.header>
     <section id="pinned-characters-section" phx-hook="PinButton">
       <%= if is_map(@pinned) do %>
-        <div :for={{_, character} <- @pinned}>
+        <div :for={
+          {_, character} <-
+            Enum.sort_by(
+              @pinned,
+              fn {id, char} -> {Map.get(@online_statuses, id) == :offline, char.name_first_lower} end
+            )
+        }>
+          <%= if Map.get(@online_statuses, character.character_id, :offline) == :online do %>
+            <span title={"#{character.name_first} is online"} class="animate-slow-blink">🔴</span>
+          <% else %>
+            <span title={"#{character.name_first} is offline"}>⚫</span>
+          <% end %>
+
+          <button
+            id={"unpin-character-button-#{character.character_id}"}
+            disabled={@pinned == :loading}
+            class="p-1 rounded-2xl text-xs"
+            phx-click="unpin-character"
+            phx-value-character-id={character.character_id}
+            title="Click to unpin this character"
+          >
+            📌
+          </button>
+
           <.link_character character={character} team_id={Map.get(character, :faction_id, 0)} />
         </div>
       <% else %>
@@ -48,6 +73,7 @@ defmodule CAIWeb.SessionLive do
       |> assign(:ref_errors, [])
       |> assign(:page_title, "Search for a Character")
       |> assign(:pinned, :loading)
+      |> assign(:online_statuses, %{})
     }
   end
 
@@ -70,7 +96,15 @@ defmodule CAIWeb.SessionLive do
             {id, %PendingCharacter{state: :unavailable, character_id: id}}
         end)
 
-      send(liveview, {:pinned_fetched, character_map})
+      online_statuses =
+        Map.new(character_ids, fn id ->
+          # TODO - if this leads to DB performance issues for users w/ lots of pinned chars, consider adding a
+          # `:latest_events_by_character_id` cache.
+          online? = id |> Characters.get_latest_event() |> Helpers.online?()
+          {id, (online? && :online) || :offline}
+        end)
+
+      send(liveview, {:pinned_fetched, character_map, online_statuses})
     end)
 
     {:noreply, assign(socket, :pinned, pinned)}
@@ -108,8 +142,32 @@ defmodule CAIWeb.SessionLive do
   end
 
   @impl true
-  def handle_info({:pinned_fetched, pinned}, socket) do
-    {:noreply, assign(socket, :pinned, pinned)}
+  def handle_event("unpin-character", %{"character-id" => character_id_str}, socket) do
+    character_id = String.to_integer(character_id_str)
+    pinned = Map.delete(socket.assigns.pinned, character_id)
+    online_statuses = Map.delete(socket.assigns.online_statuses, character_id)
+
+    {:noreply,
+     socket
+     |> assign(:pinned, pinned)
+     |> assign(:online_statuses, online_statuses)
+     |> push_event("set-pinned", %{"pinned" => pinned |> Map.keys() |> Enum.join(",")})}
+  end
+
+  @impl true
+  def handle_info({:pinned_fetched, pinned, online_statuses}, socket) do
+    for {character_id, _} <- online_statuses, do: Phoenix.PubSub.subscribe(CAI.PubSub, "ess:#{character_id}")
+    {:noreply, socket |> assign(:pinned, pinned) |> assign(:online_statuses, online_statuses)}
+  end
+
+  @impl true
+  def handle_info({:event, %Ecto.Changeset{data: %PlayerLogout{}} = cs}, socket) do
+    {:noreply, update(socket, :online_statuses, &Map.put(&1, cs.changes.character_id, :offline))}
+  end
+
+  @impl true
+  def handle_info({:event, %Ecto.Changeset{} = cs}, socket) do
+    {:noreply, update(socket, :online_statuses, &Map.put(&1, cs.changes.character_id, :online))}
   end
 
   def parse_id_str(idstr) do

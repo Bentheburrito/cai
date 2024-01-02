@@ -107,7 +107,7 @@ const Hooks = {
       let pinned = cookies.split(';').find(cookie_pairs => cookie_pairs.trim().startsWith('pinned='))?.split('=')[1] || '';
 
       this.pushEvent("set-pinned", { pinned })
-      this.handleEvent("set-pinned", ({ pinned: new_pinned }) => document.cookie = `pinned=${new_pinned}`);
+      this.handleEvent("set-pinned", ({ pinned: new_pinned }) => document.cookie = `pinned=${new_pinned};path=/;samesite=lax`);
     },
   }
 };
