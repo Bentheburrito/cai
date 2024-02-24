@@ -217,18 +217,23 @@ defmodule CAI.Characters do
         character_map
 
       {uncached_ids, character_map} ->
-        {:ok, characters} =
-          @query_base
-          |> term("character_id", uncached_ids)
-          |> Census.fetch()
+        @query_base
+        |> term("character_id", uncached_ids)
+        |> Census.fetch()
+        |> case do
+          {:ok, characters} ->
+            new_character_map =
+              characters
+              |> List.wrap()
+              |> Map.new(&{&1.character_id, &1})
 
-        new_character_map =
-          characters
-          |> List.wrap()
-          |> Map.new(&{&1.character_id, &1})
+            # Must merge this way, since map2 key values override map1's
+            Map.merge(character_map, new_character_map)
 
-        # Must merge this way, since map2 key values override map1's
-        Map.merge(character_map, new_character_map)
+          error ->
+            Logger.warning("get_many didn't get :ok tuple when fetching from Census: #{inspect(error)}")
+            character_map
+        end
     end
   end
 

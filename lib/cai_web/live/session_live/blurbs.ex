@@ -122,8 +122,7 @@ defmodule CAIWeb.SessionLive.Blurbs do
     end
   end
 
-  defp fetch_category(%GainExperience{experience_id: xp_id} = ge, char_id, state)
-       when xp_id in [7, 53] do
+  defp fetch_category(%GainExperience{experience_id: xp_id} = ge, char_id, state) when xp_id in [7, 53] do
     cond do
       ge.character_id == char_id -> {:ok, "revive_teammate", state}
       ge.other_id == char_id -> {:ok, "get_revived", state}
@@ -131,13 +130,8 @@ defmodule CAIWeb.SessionLive.Blurbs do
     end
   end
 
-  defp fetch_category(%Death{character_id: char_id} = death, char_id, state) do
-    if char_id == death.attacker_character_id do
-      {:ok, "suicide", state}
-    else
-      {:ok, "death", state}
-    end
-  end
+  defp fetch_category(%Death{character_id: id, attacker_character_id: id}, id, state), do: {:ok, "suicide", state}
+  defp fetch_category(%Death{character_id: char_id}, char_id, state), do: {:ok, "death", state}
 
   defp fetch_category(%Death{attacker_character_id: char_id} = death, char_id, state) do
     timestamp = death.timestamp
@@ -157,35 +151,17 @@ defmodule CAIWeb.SessionLive.Blurbs do
         {n, _, true} when n > 5 -> {"kill_penta", spree_count + 1}
       end
 
-    new_session = %Blurbs{
-      state
-      | killing_spree_count: new_spree_count,
-        last_kill_timestamp: timestamp
-    }
+    new_state = %Blurbs{state | killing_spree_count: new_spree_count, last_kill_timestamp: timestamp}
 
-    {:ok, category, new_session}
+    {:ok, category, new_state}
   end
 
-  defp fetch_category(%VehicleDestroy{} = vd, char_id, state) do
-    cond do
-      vd.character_id == char_id and vd.character_id == vd.attacker_character_id ->
-        {:ok, "destroy_own_vehicle", state}
+  defp fetch_category(%VehicleDestroy{character_id: id, attacker_character_id: id}, id, state),
+    do: {:ok, "destroy_own_vehicle", state}
 
-      vd.attacker_character_id == char_id ->
-        {:ok, "destroy_vehicle", state}
-
-      :else ->
-        :none
-    end
-  end
-
-  defp fetch_category(%PlayerLogin{character_id: char_id}, char_id, state) do
-    {:ok, "login", state}
-  end
-
-  defp fetch_category(%PlayerLogout{character_id: char_id}, char_id, state) do
-    {:ok, "logout", state}
-  end
+  defp fetch_category(%VehicleDestroy{attacker_character_id: id}, id, state), do: {:ok, "destroy_vehicle", state}
+  defp fetch_category(%PlayerLogin{character_id: char_id}, char_id, state), do: {:ok, "login", state}
+  defp fetch_category(%PlayerLogout{character_id: char_id}, char_id, state), do: {:ok, "logout", state}
 
   # defp fetch_category(%ItemAdded{character_id: char_id} = ia, char_id, state) do
   #   cond do
@@ -203,7 +179,5 @@ defmodule CAIWeb.SessionLive.Blurbs do
   #   end
   # end
 
-  defp fetch_category(_event, _char_id, _state) do
-    :none
-  end
+  defp fetch_category(_event, _char_id, _state), do: :none
 end
