@@ -2,11 +2,8 @@
 
 ## A Planetside 2 session tracker
 
-### https://planetside.isreally.fun
-
 CAI is a WIP session tracker that aims to provide quick access to live game data. The website currently offers a character 
-session tracker, and provides session history up to a certain point in time. (As of writing, data is recorded from July
-22, 2023 to the present).
+session tracker, and provides session history up to a certain point in time.
 
 This project is still in its early stages, so input from users is very welcome :)
 
