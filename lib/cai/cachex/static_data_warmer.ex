@@ -1,47 +1,60 @@
 defmodule CAI.Cachex.StaticDataWarmer do
   @moduledoc """
-  Reads static data from endpoints every #{CAI.Cachex.static_data_interval_hours()} hours, dumping the result at
-  #{CAI.Cachex.dump_path()}.
   """
   use Cachex.Warmer
 
-  require Logger
-
   import CAI.Cachex
 
+  alias CAI.Cachex.StaticData
   alias CAI.Cachex.StaticDataWarmer.Getters
+  alias CAI.Repo
+
+  require Logger
+
+  @max_attempts 3
 
   @impl true
   def interval, do: :timer.hours(static_data_interval_hours())
 
-  @max_attempts 3
   @doc """
-  Tries to load the dump at #{dump_path()} into CAI.Cachex.static_data(). If it does not exist, we will query the
-  GitHub/Census endpoints to populate the cache, and then dump it.
-
-  This fn will retry querying for static data #{@max_attempts} times before failing.
   """
   @impl true
   def execute(_) do
-    case Cachex.Disk.read(dump_path()) do
-      {:ok, pairs} ->
-        Logger.info("Successfully loaded static data from #{dump_path()}")
-        {:ok, pairs}
+    case Repo.all(StaticData) do
+      [] ->
+        Logger.info("No static data in DB, attempting to fetch...")
+        fetch_data()
 
-      error ->
-        Logger.info("Unable to load dumpfile at #{dump_path()}: #{inspect(error)} attempting to fetch...")
-
-        case query_static_data() do
-          {:ok, pairs} ->
-            Cachex.Disk.write(pairs, dump_path())
-            Logger.info("Successfully fetched and dumped static data!")
-            {:ok, pairs}
-
-          {:error, error} ->
-            Logger.error("Failed to query_static_data: #{inspect(error)}")
+      [%StaticData{inserted_at: inserted_at} | _] = data ->
+        if Date.compare(Date.utc_today(), inserted_at) == :gt do
+          fetch_data()
+        else
+          Logger.info("Successfully loaded static data from DB")
+          {:ok, Enum.map(data, &{{&1.kind, &1.id}, &1.data})}
         end
     end
   end
+
+  defp fetch_data do
+    case query_static_data() do
+      {:ok, cache_map} ->
+        {count, data} =
+          Repo.insert_all(StaticData, Enum.map(cache_map, &cache_entry_to_attrs/1),
+            returning: true,
+            on_conflict: :replace_all,
+            conflict_target: [:kind, :id]
+          )
+
+        Logger.info("Successfully fetched and saved static data (#{count})")
+        {:ok, Enum.map(data, &{{&1.kind, &1.id}, &1.data})}
+
+      {:error, error} ->
+        Logger.error("Failed to query_static_data: #{inspect(error)}")
+    end
+  end
+
+  defp cache_entry_to_attrs({{kind, id}, data}),
+    do: %{kind: kind, id: id, data: data, inserted_at: DateTime.utc_now(), updated_at: DateTime.utc_now()}
 
   defp query_static_data do
     # Outer ok tuple is the result of the task from Task.async_stream, the inner ok tuple is from the Getters fxns
@@ -62,7 +75,7 @@ defmodule CAI.Cachex.StaticDataWarmer do
     |> Enum.reduce_while(%{}, reducer)
     |> case do
       {:error, _} = error_tuple -> error_tuple
-      map -> {:ok, Map.to_list(map)}
+      cache_map -> {:ok, cache_map}
     end
   end
 

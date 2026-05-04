@@ -25,7 +25,7 @@ defmodule CAI.Census do
 
   @closed_timeout_ms 10_000
   @fail_count_threshold 3
-  @httpoison_timeout_ms 6 * 1000
+  @query_timeout_ms 6 * 1000
   @max_query_retries 5
   # @max_queries_in_flight 3
   @slowed_period_ms 1_500
@@ -176,7 +176,7 @@ defmodule CAI.Census do
     {:keep_state, state}
   end
 
-  def closed(:state_timeout, {:fail_count, n}, state), do: {:next_state, :slowed, %__MODULE__{state | fail_count: n}}
+  def closed(:state_timeout, {:fail_count, n}, state), do: {:next_state, :slowed, put_in(state.fail_count, n)}
   def closed(:state_timeout, old_state, %__MODULE__{} = state), do: {:next_state, old_state, state}
   def closed(:cast, {:fetch, _from, _query}, state), do: {:keep_state, state, [:postpone]}
   def closed(:info, {:fetch_complete, query, {:ok, _} = result}, state), do: handle_result(state, query, result)
@@ -243,7 +243,7 @@ defmodule CAI.Census do
 
     Task.Supervisor.start_child(TaskSupervisor, fn ->
       query
-      |> API.query(CAI.sid(), recv_timeout: @httpoison_timeout_ms)
+      |> API.query(CAI.sid(), receive_timeout: @query_timeout_ms)
       |> from_query_result()
       |> case do
         {:ok, data} ->
@@ -262,7 +262,7 @@ defmodule CAI.Census do
     {:ok, data}
   end
 
-  defp from_query_result({:error, %HTTPoison.Error{reason: :timeout}}) do
+  defp from_query_result({:error, %Req.TransportError{reason: :timeout}}) do
     Logger.info("Census request resulted in a timeout")
 
     :timeout
@@ -274,7 +274,7 @@ defmodule CAI.Census do
     {:error, error}
   end
 
-  defp handle_result(state, query, result) do
+  defp handle_result(%__MODULE__{} = state, query, result) do
     {pids, pending} = Map.pop(state.pending, query, [])
     failed = Map.delete(state.failed, query)
 

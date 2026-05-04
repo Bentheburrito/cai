@@ -42,8 +42,9 @@ defmodule CAIWeb do
         formats: [:html, :json],
         layouts: [html: CAIWeb.Layouts]
 
+      use Gettext, backend: CAIWeb.Gettext
+
       import Plug.Conn
-      import CAIWeb.Gettext
 
       unquote(verified_routes())
     end
@@ -81,11 +82,14 @@ defmodule CAIWeb do
 
   defp html_helpers do
     quote do
+      # translation
+      use Gettext, backend: CAIWeb.Gettext
+
       # HTML escaping functionality
       import Phoenix.HTML
-      # Core UI components and translation
+
+      # Core UI components
       import CAIWeb.CoreComponents
-      import CAIWeb.Gettext
 
       # Shortcut for generating JS commands
       alias Phoenix.LiveView.JS

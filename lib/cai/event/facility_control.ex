@@ -1,14 +1,11 @@
-defmodule CAI.ESS.FacilityControl do
+defmodule CAI.Event.FacilityControl do
   @moduledoc """
   Ecto schema for FacilityControl events.
   """
   use Ecto.Schema
 
-  import Ecto.Changeset
-
   @primary_key false
-
-  schema "facility_controls" do
+  embedded_schema do
     field :timestamp, :integer
     field :facility_id, :integer
     field :world_id, :integer
@@ -19,14 +16,10 @@ defmodule CAI.ESS.FacilityControl do
     field :zone_id, :integer
   end
 
-  def changeset(event, params \\ %{}) do
-    field_list =
-      :fields
-      |> __MODULE__.__schema__()
-      |> List.delete(:id)
-
-    event
-    |> cast(params, field_list)
-    |> unique_constraint([:timestamp, :facility_id, :world_id, :new_faction_id], name: "facility_controls_pkey")
+  defimpl JSON.Encoder do
+    def encode(event, opts) do
+      {:ok, dumped_event} = CAI.Event.Type.dump(event)
+      JSON.encode!(dumped_event, opts)
+    end
   end
 end

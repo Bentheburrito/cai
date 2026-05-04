@@ -12,7 +12,7 @@ defmodule CAIWeb.SessionComponents do
   import CAI.Guards, only: [is_character_id: 1]
 
   alias CAI.Characters.Character
-  alias CAI.ESS.FacilityControl
+  alias CAI.Event.FacilityControl
 
   alias CAIWeb.Utils
 
@@ -23,14 +23,14 @@ defmodule CAIWeb.SessionComponents do
 
   def facility_control(%{event: %FacilityControl{new_faction_id: f_id, old_faction_id: f_id}} = assigns) do
     ~H"""
-    <%= @facility_info["facility_name"] %> was defended by the <%= CAI.factions()[@event.new_faction_id].alias %>
+    {@facility_info["facility_name"]} was defended by the {CAI.factions()[@event.new_faction_id].alias}
     """
   end
 
   def facility_control(assigns) do
     ~H"""
-    <%= @facility_info["facility_name"] %> was captured by the
-    <%= CAI.factions()[@event.new_faction_id].alias %> from the <%= CAI.factions()[@event.old_faction_id].alias %>
+    {@facility_info["facility_name"]} was captured by the
+    {CAI.factions()[@event.new_faction_id].alias} from the {CAI.factions()[@event.old_faction_id].alias}
     """
   end
 
@@ -57,34 +57,34 @@ defmodule CAIWeb.SessionComponents do
 
   def link_character(%{character: %{state: :unavailable, character_id: id}} = assigns) when is_character_id(id) do
     ~H"""
-    <%= @prepend %>
+    {@prepend}
     <.link
       navigate={~p"/sessions/#{@character.character_id}"}
       class="rounded pl-1 pr-1 mr-1 bg-gray-800 hover:text-gray-400"
     >
       <.vehicle_icon vehicle_id={@vehicle_id} character_name="[Name Unavailable]" />
-      <.loadout_icon loadout_id={@loadout_id} /> [Name Unavailable] <%= (@possessive? && "'s") || "" %>
+      <.loadout_icon loadout_id={@loadout_id} /> [Name Unavailable] {(@possessive? && "'s") || ""}
     </.link>
     """
   end
 
   def link_character(%{character: %{state: :unavailable}} = assigns) do
     ~H"""
-    <%= @prepend %>
+    {@prepend}
     <span title={"NPC ID #{@character.character_id}"}>a vehicle</span>
     """
   end
 
   def link_character(%{character: %Character{}} = assigns) do
     ~H"""
-    <%= @prepend %>
+    {@prepend}
     <.link
       navigate={~p"/sessions/#{@character.character_id}"}
       class={"rounded pl-1 pr-1 mr-1 #{Utils.faction_css_classes(@character.faction_id, @team_id)}"}
     >
       <.vehicle_icon vehicle_id={@vehicle_id} character_name={@character.name_first} />
       <.loadout_icon loadout_id={@loadout_id} />
-      <%= "#{@character.name_first}#{(@possessive? && "'s") || ""}" %>
+      {"#{@character.name_first}#{(@possessive? && "'s") || ""}"}
     </.link>
     """
   end
@@ -137,7 +137,7 @@ defmodule CAIWeb.SessionComponents do
           class="inline object-contain h-4"
         />
       <% _ -> %>
-        <%= nil %>
+        {nil}
     <% end %>
     """
   end
@@ -159,15 +159,22 @@ defmodule CAIWeb.SessionComponents do
 
   def link_aggregates(assigns) do
     ~H"""
-    <%= for {aggregate, value_descriptor} <- aggregate_fields(), @aggregates[aggregate].character.character_id != 0 do %>
-      <%= aggregate |> Atom.to_string() |> String.capitalize() %>:
-      <.link_character character={@aggregates[aggregate].character} />
-      (<%= value_descriptor %> <%= @aggregates[aggregate].value %> times) <br />
+    <%= for {aggregate, {character_id, value}, value_descriptor} <- aggregates(@session), character_id != 0 do %>
+      {String.capitalize(aggregate)}: <%!-- <.link_character character={@characters[character_id].character} /> --%>
+      {character_id} (todo link character)
+      ({value_descriptor} {value} times) <br />
     <% end %>
     """
   end
 
-  defp aggregate_fields, do: [{:nemesis, "died to"}, {:vanquished, "killed"}]
+  defp aggregates(session),
+    do: [{"Nemesis", nemesis_aggregator(session), "died to"}, {"Vanquished", vanquished_aggregator(session), "killed"}]
+
+  defp nemesis_aggregator(session),
+    do: Enum.max_by(session.death_map, fn {_id, death_count} -> death_count end, &>=/2, fn -> :none end)
+
+  defp vanquished_aggregator(session),
+    do: Enum.max_by(session.kill_map, fn {_id, kill_count} -> kill_count end, &>=/2, fn -> :none end)
 
   def get_weapon_name(0, 0), do: "a fall from a high place"
   def get_weapon_name(0, _), do: "a blunt force"

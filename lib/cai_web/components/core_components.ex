@@ -15,11 +15,11 @@ defmodule CAIWeb.CoreComponents do
   Icons are provided by [heroicons](https://heroicons.com). See `icon/1` for usage.
   """
   use Phoenix.Component
+  use Gettext, backend: CAIWeb.Gettext
 
   alias CAIWeb.Utils
   alias Phoenix.HTML.Form
   alias Phoenix.LiveView.JS
-  import CAIWeb.Gettext
 
   @doc """
   Renders a modal.

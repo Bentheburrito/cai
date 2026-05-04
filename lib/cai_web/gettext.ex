@@ -5,7 +5,7 @@ defmodule CAIWeb.Gettext do
   By using [Gettext](https://hexdocs.pm/gettext),
   your module gains a set of macros for translations, for example:
 
-      import CAIWeb.Gettext
+      use Gettext, backend: CAIWeb.Gettext
 
       # Simple translation
       gettext("Here is the string to translate")
@@ -20,5 +20,5 @@ defmodule CAIWeb.Gettext do
 
   See the [Gettext Docs](https://hexdocs.pm/gettext) for detailed usage.
   """
-  use Gettext, otp_app: :cai
+  use Gettext.Backend, otp_app: :cai
 end

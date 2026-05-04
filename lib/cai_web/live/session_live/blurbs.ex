@@ -10,7 +10,7 @@ defmodule CAIWeb.SessionLive.Blurbs do
 
   alias CAIWeb.SessionLive.Show.Model
 
-  alias CAI.ESS.{
+  alias CAI.Event.{
     Death,
     GainExperience,
     PlayerLogin,
@@ -40,12 +40,10 @@ defmodule CAIWeb.SessionLive.Blurbs do
 
   def voicepacks, do: @voicepacks
 
-  def track_paths(voicepack) when voicepack in @voicepacks do
+  def voicepack_filenames(voicepack) when voicepack in @voicepacks do
     category_map = Map.fetch!(@blurbs, voicepack)
 
-    for {_category, filenames} <- category_map, filename <- filenames, into: MapSet.new() do
-      ~p"/audio/voicepacks/#{voicepack}/tracks/#{filename}"
-    end
+    for {_category, filenames} <- category_map, filename <- filenames, into: MapSet.new(), do: filename
   end
 
   def track_paths(voicepack) do
@@ -80,7 +78,7 @@ defmodule CAIWeb.SessionLive.Blurbs do
     character_id = socket.assigns.model.character.character_id
 
     case fetch_category(event, character_id, state) do
-      {:ok, category, state} ->
+      {:ok, category, %Blurbs{} = state} ->
         # if the track_queue is empty and we're not currently playing anything, play the sound directly.
         # Otherwise, enqueue.
         if match?([], state.track_queue) and not state.playing? do
@@ -110,7 +108,7 @@ defmodule CAIWeb.SessionLive.Blurbs do
     end
   end
 
-  defp play_blurb(category, socket, state) do
+  defp play_blurb(category, socket, %Blurbs{} = state) do
     case get_random_blurb_filename(category, state) do
       {:ok, track_filename} ->
         socket
@@ -139,7 +137,7 @@ defmodule CAIWeb.SessionLive.Blurbs do
     end
   end
 
-  defp fetch_category(%Death{attacker_character_id: char_id} = death, char_id, state) do
+  defp fetch_category(%Death{attacker_character_id: char_id} = death, char_id, %Blurbs{} = state) do
     timestamp = death.timestamp
 
     %Blurbs{killing_spree_count: spree_count, last_kill_timestamp: spree_timestamp} = state

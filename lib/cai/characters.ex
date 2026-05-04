@@ -10,21 +10,9 @@ defmodule CAI.Characters do
   import PS2.API.QueryBuilder, except: [field: 2, limit: 2]
 
   alias CAI.Census
-  alias CAI.Characters.{Character, Outfit, Session}
-  alias CAI.Repo
+  alias CAI.Characters.{Character, Outfit}
   alias Ecto.Changeset
   alias PS2.API.Query
-
-  alias CAI.ESS.{
-    Death,
-    FacilityControl,
-    GainExperience,
-    PlayerFacilityCapture,
-    PlayerFacilityDefend,
-    PlayerLogin,
-    PlayerLogout,
-    VehicleDestroy
-  }
 
   require Logger
 
@@ -252,89 +240,11 @@ defmodule CAI.Characters do
     end
   end
 
-  @doc """
-  Get an ordered list of all events in a session.
-
-  This function builds a session from the given character_id and login/logout timestamps, then iterates through its
-  embedded events, returning a list of all events sorted in reverse-chronological (descending) order.
-
-  If building a session fails (due to a changeset error), `{:error, changeset}` is returned instead.
-
-  This function serves to be used in the event feed in session LiveViews.
-
-  Since this is an expensive operation for longer game sessions, if `cache?` is `true` (which is the default), the
-  event history and session may be cached for faster access later. This argument should really only be `false` when the
-  session history could change (i.e. the character is online generating new events).
-
-  TODO: cache results
-  """
-  @spec get_session_history(
-          character_id() | Session.t(),
-          login :: integer(),
-          logout :: integer(),
-          cache? :: boolean()
-        ) :: [map()] | {:error, Ecto.Changeset.t()}
-  def get_session_history(character_id_or_session, login, logout, cache? \\ true)
-
-  def get_session_history(character_id, login, logout, _cache?) when is_character_id(character_id) do
-    with {:ok, session} <- Session.build(character_id, login, logout) do
-      get_session_history(session, login, logout)
+  def online?(character_id) when is_character_id(character_id) do
+    case CAI.game_sessions(character_id) do
+      %{sessions: [%{status: :in_progress} | _]} -> true
+      _else -> false
     end
-  end
-
-  def get_session_history(%Session{} = session, login, logout, _cache?) do
-    {world_id, zone_ids, facility_ids} =
-      (Map.get(session, :player_facility_captures, []) ++ Map.get(session, :player_facility_defends, []))
-      |> Enum.reduce({nil, MapSet.new(), MapSet.new()}, fn event, {_, zone_ids, facility_ids} ->
-        {event.world_id, MapSet.put(zone_ids, event.zone_id), MapSet.put(facility_ids, event.facility_id)}
-      end)
-
-    [
-      :battle_rank_ups,
-      :deaths,
-      :gain_experiences,
-      :facility_control,
-      :player_facility_captures,
-      :player_facility_defends,
-      :vehicle_destroys,
-      :login,
-      :logout
-    ]
-    |> Enum.reduce([], fn
-      # special case for `embeds_one` fields (which aren't a list)
-      field, event_list when field in [:login, :logout] ->
-        case Map.fetch(session, field) do
-          {:ok, nil} -> event_list
-          {:ok, event} -> [event | event_list]
-          _ -> event_list
-        end
-
-      # Instead of storing facility_control events on a Session, let's just make another query here
-      :facility_control, event_list when not is_nil(world_id) ->
-        FacilityControl
-        |> where([fc], fc.timestamp >= ^login and fc.timestamp <= ^logout)
-        |> where([fc], fc.world_id == ^world_id)
-        |> where([fc], fc.zone_id in ^MapSet.to_list(zone_ids))
-        |> where([fc], fc.facility_id in ^MapSet.to_list(facility_ids))
-        |> Repo.all()
-        |> Kernel.++(event_list)
-
-      :facility_control, event_list ->
-        event_list
-
-      field, acc ->
-        Enum.reduce(Map.fetch!(session, field), acc, fn event, event_list ->
-          [event | event_list]
-        end)
-    end)
-    |> Enum.sort_by(& &1.timestamp, :desc)
-  end
-
-  def get_latest_event(character_id) when is_character_id(character_id) do
-    character_id
-    |> event_types_and_timestamps_query()
-    |> limit(1)
-    |> Repo.one()
   end
 
   @default_session_count 10
@@ -354,89 +264,5 @@ defmodule CAI.Characters do
         Logger.error("get_session_boundaries/2 failed to fetch character, #{character_name}: #{inspect(error)}")
         :error
     end
-  end
-
-  def get_session_boundaries(character_id, max_sessions) when is_character_id(character_id) do
-    case list_all_timestamps(character_id) do
-      [_first_pair | _rest] = timestamp_event_type_pairs ->
-        get_session_boundaries(character_id, timestamp_event_type_pairs, max_sessions)
-
-      # no previous sessions 😱
-      [] ->
-        {:ok, character_id, []}
-    end
-  end
-
-  defp get_session_boundaries(
-         character_id,
-         [first_pair | timestamp_event_type_pairs],
-         max_sessions
-       ) do
-    %{timestamp: first_pair_timestamp} = first_pair
-    init_acc = {first_pair, first_pair_timestamp, length(timestamp_event_type_pairs), []}
-
-    {_, _, _, timestamp_pairs} =
-      timestamp_event_type_pairs
-      |> Stream.with_index(1)
-      |> Enum.reduce_while(init_acc, &session_reducer(&1, &2, max_sessions))
-
-    {:ok, character_id, Enum.reverse(timestamp_pairs)}
-  end
-
-  # Note: we are reducing in descending order, so "last_" values are actually chronologically later than `event`.
-  defp session_reducer({event, index}, {last_event, end_ts, end_index, acc}, max_sessions) do
-    %{timestamp: ts, type: t} = event
-    %{timestamp: last_ts, type: last_t} = last_event
-
-    cond do
-      index == end_index ->
-        {:halt, {event, ts, end_index, [{last_ts, end_ts} | acc]}}
-
-      session_boundary?(t, last_t, ts, last_ts) ->
-        action = if length(acc) + 1 >= max_sessions, do: :halt, else: :cont
-        {action, {event, ts, end_index, [{last_ts, end_ts} | acc]}}
-
-      :else ->
-        {:cont, {event, end_ts, end_index, acc}}
-    end
-  end
-
-  @session_boundary_secs 30 * 60
-  defp session_boundary?(_, "login", _, _), do: true
-  defp session_boundary?("logout", _, _, _), do: true
-  defp session_boundary?(_, _, ts1, ts2), do: ts2 - ts1 > @session_boundary_secs
-
-  defp list_all_timestamps(character_id) do
-    character_id
-    |> event_types_and_timestamps_query()
-    |> Repo.all()
-  end
-
-  defp event_types_and_timestamps_query(character_id) do
-    init_query =
-      from(ge in GainExperience,
-        select: %{timestamp: ge.timestamp, type: "ge"},
-        where: ge.character_id == ^character_id
-      )
-
-    [
-      {Death, "death"},
-      {VehicleDestroy, "vd"},
-      {PlayerFacilityCapture, "pfc"},
-      {PlayerFacilityDefend, "pfd"},
-      {PlayerLogin, "login"},
-      {PlayerLogout, "logout"}
-    ]
-    |> Enum.reduce(init_query, fn {mod, type}, query ->
-      to_union =
-        from(e in mod,
-          select: %{timestamp: e.timestamp, type: ^type},
-          where: e.character_id == ^character_id
-        )
-
-      union_all(query, ^to_union)
-    end)
-    |> subquery()
-    |> order_by(desc: :timestamp)
   end
 end

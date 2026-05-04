@@ -1,14 +1,11 @@
-defmodule CAI.ESS.GainExperience do
+defmodule CAI.Event.GainExperience do
   @moduledoc """
   Ecto schema for GainExperience events.
   """
   use Ecto.Schema
 
-  import Ecto.Changeset
-
   @primary_key false
-
-  schema "gain_experiences" do
+  embedded_schema do
     field :amount, :integer
     field :character_id, :integer
     field :experience_id, :integer
@@ -20,13 +17,10 @@ defmodule CAI.ESS.GainExperience do
     field :zone_id, :integer
   end
 
-  def changeset(event, params \\ %{}) do
-    field_list =
-      :fields
-      |> __MODULE__.__schema__()
-      |> List.delete(:id)
-
-    event
-    |> cast(params, field_list)
+  defimpl JSON.Encoder do
+    def encode(event, opts) do
+      {:ok, dumped_event} = CAI.Event.Type.dump(event)
+      JSON.encode!(dumped_event, opts)
+    end
   end
 end

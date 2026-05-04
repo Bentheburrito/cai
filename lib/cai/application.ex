@@ -12,13 +12,11 @@ defmodule CAI.Application do
   def start(_type, _args) do
     Logger.add_translator({CAI.StatemTranslator, :translate})
 
-    subscriptions = CAI.ess_subscriptions()
-
     ess_opts = [
-      subscriptions: subscriptions,
-      clients: [CAI.ESS.Client],
-      service_id: CAI.sid(),
-      endpoint: "push.nanite-systems.net/streaming"
+      subscription: CAI.ess_subscriptions(),
+      callback_mod: CAI.ESS.Client,
+      service_id: CAI.sid()
+      # endpoint: "wss://push.nanite-systems.net/streaming"
     ]
 
     static_data_opts = [
@@ -52,6 +50,12 @@ defmodule CAI.Application do
       Supervisor.child_spec({Cachex, name: facilities()}, id: facilities()),
       Supervisor.child_spec({Cachex, name: outfits()}, id: outfits()),
       Supervisor.child_spec({Cachex, static_data_opts}, id: static_data()),
+      # Start the supervisor for Projection.Servers
+      {CAI.Projection.Server.Supervisor, strategy: :one_for_one},
+      # Start the registry for Projection.Servers
+      {Registry, keys: :unique, name: CAI.Projection.Registry},
+      # Start the EventHandler GenServer
+      {CAI.EventHandler, []},
       # Start the Census gateway TaskSupervisor
       {Task.Supervisor, name: CAI.Census.TaskSupervisor},
       # Start the Census gateway gen_statem
@@ -59,7 +63,7 @@ defmodule CAI.Application do
       # Start the ESS Client
       CAI.ESS.Client,
       # Start the ESS Socket
-      {PS2.Socket, ess_opts}
+      {PS2.ESS, ess_opts}
     ]
 
     # See https://hexdocs.pm/elixir/Supervisor.html

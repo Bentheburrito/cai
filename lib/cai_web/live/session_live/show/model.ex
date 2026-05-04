@@ -5,12 +5,13 @@ defmodule CAIWeb.SessionLive.Show.Model do
 
   import LiveModel
 
-  alias CAI.Characters.{Character, Session}
+  alias CAI.Characters.Character
   alias CAIWeb.SessionLive.Blurbs
   alias CAIWeb.SessionLive.Entry
 
   defmodel do
-    field :aggregates, map(), default: Session.take_aggregates()
+    # TODO: replace: Session.take_aggregates()
+    field :session, map(), default: %{}
     field :blurbs, {:enabled, Blurbs.t()} | :disabled, default: :disabled
     field :character, Character.t()
     field :duration_mins, integer(), default: 0

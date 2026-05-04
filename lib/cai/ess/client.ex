@@ -1,128 +1,85 @@
 defmodule CAI.ESS.Client do
   @moduledoc """
-  Consumes ESS events.
-
-  TODO: If X amount of Repo.insert!s fail within Y seconds, *unsubscribe*, and resubscribe. See ~NOTE~ below
+  Consumes events from the ESS and injects them into the event stream.
   """
-  @behaviour PS2.SocketClient
+  @behaviour PS2.ESS
 
   use GenServer
 
-  alias CAI.ESS
+  alias CAI.Event
   alias Ecto.Changeset
-  alias Phoenix.PubSub
 
   require Logger
 
-  @restart_socket_after 60 * 1000
-  @event_map %{
-    PS2.gain_experience() => ESS.GainExperience,
-    PS2.death() => ESS.Death,
-    PS2.vehicle_destroy() => ESS.VehicleDestroy,
-    PS2.player_login() => ESS.PlayerLogin,
-    PS2.player_logout() => ESS.PlayerLogout,
-    PS2.player_facility_defend() => ESS.PlayerFacilityDefend,
-    PS2.player_facility_capture() => ESS.PlayerFacilityCapture,
-    PS2.battle_rank_up() => ESS.BattleRankUp,
-    PS2.metagame_event() => ESS.MetagameEvent,
-    PS2.continent_lock() => ESS.ContinentLock,
-    PS2.continent_unlock() => ESS.ContinentUnlock,
-    PS2.facility_control() => ESS.FacilityControl
-  }
-
+  @restart_ess_connection_after :timer.seconds(40)
+  @supported_events [
+    PS2.gain_experience(),
+    PS2.death(),
+    PS2.vehicle_destroy(),
+    PS2.player_login(),
+    PS2.player_logout(),
+    PS2.player_facility_defend(),
+    PS2.player_facility_capture(),
+    PS2.battle_rank_up(),
+    PS2.metagame_event(),
+    PS2.continent_lock(),
+    PS2.continent_unlock(),
+    PS2.facility_control()
+  ]
   @heartbeat PS2.server_health_update()
-  @impl PS2.SocketClient
-  def handle_event({@heartbeat, _payload}) do
-    heartbeat()
-  end
+
+  @impl PS2.ESS
+  def handle_event(%{"event_name" => @heartbeat}), do: heartbeat()
 
   # special case for random vehicles dying/despawning
-  @impl PS2.SocketClient
-  def handle_event({"VehicleDestroy", %{"character_id" => "0", "attacker_character_id" => "0"}}) do
+  @impl PS2.ESS
+  def handle_event(%{"event_name" => "VehicleDestroy", "character_id" => "0", "attacker_character_id" => "0"}) do
     :noop
   end
 
-  @supported_events Map.keys(@event_map)
-  @impl PS2.SocketClient
-  def handle_event({event_name, payload}) when event_name in @supported_events do
-    case cast_event(event_name, payload) do
-      {:ok, event} ->
-        if is_map_key(event.changes, :character_id) do
-          PubSub.broadcast(CAI.PubSub, "ess:#{event.changes.character_id}", {:event, event})
-        end
-
-        if is_map_key(event.changes, :attacker_character_id) do
-          PubSub.broadcast(
-            CAI.PubSub,
-            "ess:#{event.changes.attacker_character_id}",
-            {:event, event}
-          )
-        end
-
-        if is_map_key(event.changes, :other_id) do
-          PubSub.broadcast(CAI.PubSub, "ess:#{event.changes.other_id}", {:event, event})
-        end
-
-        PubSub.broadcast(CAI.PubSub, "ess:#{event_name}", {:event, event})
-
-        # ~NOTE~: convert to unbanged insert, wrap in function that will send an event to this gen server if the insert
-        # failed, then the gen server keep track of the X fails in Y seconds described in the moduledoc.
-        CAI.Repo.insert!(event)
-
-      {:error, reason} ->
-        Logger.error("Couldn't handle event: #{reason}")
+  @impl PS2.ESS
+  def handle_event(%{"event_name" => event_name} = attrs) when event_name in @supported_events do
+    case cast_event(attrs) do
+      %Changeset{valid?: true} = event_cs -> CAI.emit_event(event_cs)
+      changeset -> Logger.error("Couldn't cast ESS payload to event: #{inspect(changeset)}")
     end
   end
 
-  @impl PS2.SocketClient
-  def handle_event(_unknown) do
-    # Logger.warning("Unknown ESS event: #{inspect(unknown)}")
-    nil
-  end
+  @impl PS2.ESS
+  def handle_event(_unknown), do: nil
 
   @doc """
-  Casts the given payload to an event struct.
+  Casts the given attrs to an Event struct.
   """
-  @spec cast_event(String.t(), map()) ::
-          {:ok, struct()} | {:error, :unknown_event} | {:error, :bad_payload}
-  def cast_event(event_name, payload) do
-    with {:ok, module} <- Map.fetch(@event_map, event_name),
-         %Changeset{valid?: true} = changeset <- module.changeset(struct(module), payload) do
-      {:ok, changeset}
-    else
-      %Changeset{valid?: false} -> {:error, :bad_payload}
-      :error -> {:error, :unknown_event}
-    end
-  end
+  @spec cast_event(attrs :: map()) :: Changeset.t()
+  def cast_event(attrs), do: Changeset.cast(%Event{}, %{"struct" => attrs}, [:struct])
 
   def start_link(_) do
     GenServer.start_link(__MODULE__, nil, name: __MODULE__)
   end
 
-  def heartbeat do
-    GenServer.cast(__MODULE__, :socket_heartbeat)
-  end
+  def heartbeat, do: GenServer.cast(__MODULE__, :ess_heartbeat)
 
   ### IMPL
 
   @impl GenServer
   def init(_) do
-    timer_ref = Process.send_after(self(), :restart_socket, @restart_socket_after)
+    timer_ref = Process.send_after(self(), :restart_ess_connection, @restart_ess_connection_after)
     {:ok, timer_ref}
   end
 
   @impl GenServer
-  def handle_info(:restart_socket, _timer_ref) do
-    Logger.warning("No heartbeat received after #{@restart_socket_after}ms, restarting socket")
+  def handle_info(:restart_ess_connection, _timer_ref) do
+    Logger.warning("No heartbeat received after #{@restart_ess_connection_after}ms, restarting socket")
 
-    Supervisor.terminate_child(CAI.Supervisor, PS2.Socket)
-    Supervisor.restart_child(CAI.Supervisor, PS2.Socket)
-    {:noreply, Process.send_after(self(), :restart_socket, @restart_socket_after)}
+    Supervisor.terminate_child(CAI.Supervisor, PS2.ESS)
+    Supervisor.restart_child(CAI.Supervisor, PS2.ESS)
+    {:noreply, Process.send_after(self(), :restart_ess_connection, @restart_ess_connection_after)}
   end
 
   @impl GenServer
-  def handle_cast(:socket_heartbeat, timer_ref) do
+  def handle_cast(:ess_heartbeat, timer_ref) do
     Process.cancel_timer(timer_ref)
-    {:noreply, Process.send_after(self(), :restart_socket, @restart_socket_after)}
+    {:noreply, Process.send_after(self(), :restart_ess_connection, @restart_ess_connection_after)}
   end
 end

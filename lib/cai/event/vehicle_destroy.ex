@@ -1,14 +1,11 @@
-defmodule CAI.ESS.VehicleDestroy do
+defmodule CAI.Event.VehicleDestroy do
   @moduledoc """
   Ecto schema for VehicleDestroy events.
   """
   use Ecto.Schema
 
-  import Ecto.Changeset
-
   @primary_key false
-
-  schema "vehicle_destroys" do
+  embedded_schema do
     field :character_id, :integer
     field :timestamp, :integer
     field :attacker_character_id, :integer
@@ -24,13 +21,10 @@ defmodule CAI.ESS.VehicleDestroy do
     field :zone_id, :integer
   end
 
-  def changeset(event, params \\ %{}) do
-    field_list =
-      :fields
-      |> __MODULE__.__schema__()
-      |> List.delete(:id)
-
-    event
-    |> cast(params, field_list)
+  defimpl JSON.Encoder do
+    def encode(event, opts) do
+      {:ok, dumped_event} = CAI.Event.Type.dump(event)
+      JSON.encode!(dumped_event, opts)
+    end
   end
 end

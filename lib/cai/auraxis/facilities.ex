@@ -14,7 +14,7 @@ defmodule CAI.Auraxis.Facilities do
 
   import CAI.Cachex
 
-  alias CAI.ESS.{FacilityControl, PlayerFacilityCapture, PlayerFacilityDefend}
+  alias CAI.Event.{FacilityControl, PlayerFacilityCapture, PlayerFacilityDefend}
 
   ### API ###
 

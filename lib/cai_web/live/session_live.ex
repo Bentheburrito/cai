@@ -1,12 +1,11 @@
 defmodule CAIWeb.SessionLive do
-  alias CAI.ESS.Helpers
   use CAIWeb, :live_view
 
   import CAIWeb.SessionComponents
 
   alias CAI.Characters
   alias CAI.Characters.{Character, PendingCharacter}
-  alias CAI.ESS.PlayerLogout
+  alias CAI.Event.PlayerLogout
 
   require Logger
 
@@ -100,8 +99,8 @@ defmodule CAIWeb.SessionLive do
         Map.new(character_ids, fn id ->
           # If this leads to DB performance issues for users w/ lots of pinned chars, consider adding a
           # `:latest_events_by_character_id` cache.
-          online? = id |> Characters.get_latest_event() |> Helpers.online?()
-          {id, (online? && :online) || :offline}
+          status = if CAI.Characters.online?(id), do: :online, else: :offline
+          {id, status}
         end)
 
       send(liveview, {:pinned_fetched, character_map, online_statuses})

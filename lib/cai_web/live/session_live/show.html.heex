@@ -20,9 +20,9 @@
             <.timestamp id="session-logout" unix_timestamp={@model.logout} class="font-bold" />
           </div>
         </div>
-        Lasted <span class="font-bold"><%= format_duration(@model.login, @model.logout) %></span>
+        Lasted <span class="font-bold">{format_duration(@model.login, @model.logout)}</span>
       <% else %>
-        <%= @model.character.name_first %> is offline.
+        {@model.character.name_first} is offline.
       <% end %>
     </h3>
     <.simple_form
@@ -73,9 +73,9 @@
           <span id="blurb-player" phx-hook="BlurbPlayer">🔊 Turn off Blurbs</span>
           <%!-- Need to remove the . in extension names since it messes with querySelector --%>
           <audio
-            :for={source <- Blurbs.track_paths(blurbs.voicepack)}
-            src={source}
-            id={"blurb-source-#{source |> String.split("/") |> List.last() |> String.replace(".", "")}"}
+            :for={filename <- Blurbs.voicepack_filenames(blurbs.voicepack)}
+            src={~p"/audio/voicepacks/#{blurbs.voicepack}/tracks/#{filename}"}
+            id={"blurb-source-#{String.replace(filename, ".", "")}"}
             class="blurb-source-audio"
             phx-hook="BlurbSource"
           >
@@ -85,7 +85,7 @@
   </div>
 </div>
 
-<div :if={@model.aggregates}>
+<div :if={@model.session}>
   <h3 class="m-2">
     Aggregate Stats
   </h3>
@@ -96,62 +96,62 @@
       <th class="p-1 pl-2 border-solid border-b border-gray-200" title="Infantry vs. Infantry">IvI</th>
       <tr>
         <td class="p-1 pl-2 border-r">Kills</td>
-        <td class="p-1 pl-2"><%= @model.aggregates.kill_count %></td>
-        <td class="p-1 pl-2"><%= @model.aggregates.kill_ivi_count %></td>
+        <td class="p-1 pl-2">{@model.session.kill_count}</td>
+        <td class="p-1 pl-2">{@model.session.kill_ivi_count}</td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r">HS Kills</td>
-        <td class="p-1 pl-2"><%= @model.aggregates.kill_hs_count %></td>
-        <td class="p-1 pl-2"><%= @model.aggregates.kill_hs_ivi_count %></td>
+        <td class="p-1 pl-2">{@model.session.kill_hs_count}</td>
+        <td class="p-1 pl-2">{@model.session.kill_hs_ivi_count}</td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r">Deaths</td>
-        <td class="p-1 pl-2"><%= @model.aggregates.death_count %></td>
-        <td class="p-1 pl-2"><%= @model.aggregates.death_ivi_count %></td>
+        <td class="p-1 pl-2">{@model.session.death_count}</td>
+        <td class="p-1 pl-2">{@model.session.death_ivi_count}</td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r" title="Kill/Death Ratio">KDR</td>
         <td
           class="p-1 pl-2"
-          title={"# total kills / # total deaths => #{@model.aggregates.kill_count} / #{@model.aggregates.death_count}"}
+          title={"# total kills / # total deaths => #{@model.session.kill_count} / #{@model.session.death_count}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.kill_count, @model.aggregates.death_count), 2) %>
+          {Float.round(safe_divide(@model.session.kill_count, @model.session.death_count), 2)}
         </td>
         <td
           class="p-1 pl-2"
-          title={"# IvI kills / # IvI deaths => #{@model.aggregates.kill_ivi_count} / #{@model.aggregates.death_ivi_count}"}
+          title={"# IvI kills / # IvI deaths => #{@model.session.kill_ivi_count} / #{@model.session.death_ivi_count}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.kill_ivi_count, @model.aggregates.death_ivi_count), 2) %>
+          {Float.round(safe_divide(@model.session.kill_ivi_count, @model.session.death_ivi_count), 2)}
         </td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r" title="Kills/Minute">KPM</td>
         <td
           class="p-1 pl-2"
-          title={"# total kills / minutes played => #{@model.aggregates.kill_count} / #{@model.duration_mins}"}
+          title={"# total kills / minutes played => #{@model.session.kill_count} / #{@model.duration_mins}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.kill_count, @model.duration_mins), 2) %>
+          {Float.round(safe_divide(@model.session.kill_count, @model.duration_mins), 2)}
         </td>
         <td
           class="p-1 pl-2"
-          title={"# IvI kills / minutes played => #{@model.aggregates.kill_ivi_count} / #{@model.duration_mins}"}
+          title={"# IvI kills / minutes played => #{@model.session.kill_ivi_count} / #{@model.duration_mins}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.kill_ivi_count, @model.duration_mins), 2) %>
+          {Float.round(safe_divide(@model.session.kill_ivi_count, @model.duration_mins), 2)}
         </td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r" title="Headshot Kill Ratio">HSKR</td>
         <td
           class="p-1 pl-2"
-          title={"# headshot kills / # total kills => #{@model.aggregates.kill_hs_count} / #{@model.aggregates.kill_count}"}
+          title={"# headshot kills / # total kills => #{@model.session.kill_hs_count} / #{@model.session.kill_count}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.kill_hs_count, @model.aggregates.kill_count) * 100, 2) %>%
+          {Float.round(safe_divide(@model.session.kill_hs_count, @model.session.kill_count) * 100, 2)}%
         </td>
         <td
           class="p-1 pl-2"
-          title={"# IvI headshot kills / # IvI kills => #{@model.aggregates.kill_hs_ivi_count} / #{@model.aggregates.kill_ivi_count}"}
+          title={"# IvI headshot kills / # IvI kills => #{@model.session.kill_hs_ivi_count} / #{@model.session.kill_ivi_count}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.kill_hs_ivi_count, @model.aggregates.kill_ivi_count) * 100, 2) %>%
+          {Float.round(safe_divide(@model.session.kill_hs_ivi_count, @model.session.kill_ivi_count) * 100, 2)}%
         </td>
       </tr>
       <th class="p-1 pl-2 border-solid border-b border-r border-gray-200" title="Vehicle-related stats">Vehicle</th>
@@ -159,51 +159,51 @@
       <th class="p-1 pl-2 border-solid border-b border-gray-200" title="Total Nanite Cost">Nanites</th>
       <tr>
         <td class="p-1 pl-2 border-r">Destroyed</td>
-        <td class="p-1 pl-2"><%= @model.aggregates.vehicle_kill_count %></td>
-        <td class="p-1 pl-2"><%= @model.aggregates.nanites_destroyed %></td>
+        <td class="p-1 pl-2">{@model.session.vehicle_kill_count}</td>
+        <td class="p-1 pl-2">{@model.session.nanites_destroyed}</td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r">Lost</td>
-        <td class="p-1 pl-2"><%= @model.aggregates.vehicle_death_count %></td>
-        <td class="p-1 pl-2"><%= @model.aggregates.nanites_lost %></td>
+        <td class="p-1 pl-2">{@model.session.vehicle_death_count}</td>
+        <td class="p-1 pl-2">{@model.session.nanites_lost}</td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r" title="Kill/Death Ratio (Destroyed / Lost)">KDR</td>
         <td
           class="p-1 pl-2"
-          title={"# vehicles destroyed / # vehicles lost => #{@model.aggregates.vehicle_kill_count} / #{@model.aggregates.vehicle_death_count}"}
+          title={"# vehicles destroyed / # vehicles lost => #{@model.session.vehicle_kill_count} / #{@model.session.vehicle_death_count}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.vehicle_kill_count, @model.aggregates.vehicle_death_count), 2) %>
+          {Float.round(safe_divide(@model.session.vehicle_kill_count, @model.session.vehicle_death_count), 2)}
         </td>
         <td
           class="p-1 pl-2"
-          title={"# nanites destroyed / # nanites lost => #{@model.aggregates.nanites_destroyed} / #{@model.aggregates.nanites_lost}"}
+          title={"# nanites destroyed / # nanites lost => #{@model.session.nanites_destroyed} / #{@model.session.nanites_lost}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.nanites_destroyed, @model.aggregates.nanites_lost), 2) %>
+          {Float.round(safe_divide(@model.session.nanites_destroyed, @model.session.nanites_lost), 2)}
         </td>
       </tr>
       <tr>
         <td class="p-1 pl-2 border-r" title="Vehicle Kills/Minute">KPM</td>
         <td
           class="p-1 pl-2"
-          title={"# total vehicle kills / minutes played => #{@model.aggregates.vehicle_kill_count} / #{@model.duration_mins}"}
+          title={"# total vehicle kills / minutes played => #{@model.session.vehicle_kill_count} / #{@model.duration_mins}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.vehicle_kill_count, @model.duration_mins), 2) %>
+          {Float.round(safe_divide(@model.session.vehicle_kill_count, @model.duration_mins), 2)}
         </td>
         <td
           class="p-1 pl-2"
-          title={"# nanites destroyed / minutes played => #{@model.aggregates.nanites_destroyed} / #{@model.duration_mins}"}
+          title={"# nanites destroyed / minutes played => #{@model.session.nanites_destroyed} / #{@model.duration_mins}"}
         >
-          <%= Float.round(safe_divide(@model.aggregates.nanites_destroyed, @model.duration_mins), 2) %>
+          {Float.round(safe_divide(@model.session.nanites_destroyed, @model.duration_mins), 2)}
         </td>
       </tr>
     </table>
     <div class="flex-col ml-4">
-      XP Earned: <%= @model.aggregates.xp_earned %> <br /> Teammates Revived: <%= @model.aggregates.revive_count %>
-      <br /> Times Revived: <%= @model.aggregates.revived_by_count %><br />
-      <.link_aggregates aggregates={@model.aggregates} />
+      XP Earned: {@model.session.xp_earned} <br /> Teammates Revived: {@model.session.revive_count}
+      <br /> Times Revived: {@model.session.revived_by_count}<br />
+      <.link_aggregates session={@model.session} />
       <br />
-      Note: you can hover over some headers to see a more descriptive title, or hover over certain cells to see how they're calculated
+      ℹ️ hover over some headers to see a more descriptive title, or hover over certain cells to see how they're calculated
     </div>
   </div>
 </div>

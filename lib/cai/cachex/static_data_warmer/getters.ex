@@ -9,14 +9,15 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
 
   import PS2.API.QueryBuilder
 
-  alias PS2.API.{Query, QueryResult, Tree}
+  alias PS2.API.{Query, QueryResult}
+  alias PS2.API.Query.Tree
 
   require Logger
 
   @weapons_url "https://raw.githubusercontent.com/cooltrain7/Planetside-2-API-Tracker/master/Weapons/sanction-list.csv"
   def get_weapons do
     # Get weapon info with sanctions
-    case HTTPoison.get(@weapons_url) do
+    case Req.get(@weapons_url) do
       {:ok, res} ->
         [_headers | lines] = String.split(res.body, "\n")
 
@@ -91,9 +92,9 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
 
   @vehicle_url "https://raw.githubusercontent.com/cooltrain7/Planetside-2-API-Tracker/master/Census/vehicle.json"
   def get_vehicles do
-    case HTTPoison.get(@vehicle_url) do
+    case Req.get(@vehicle_url) do
       {:ok, res} ->
-        res_map = Jason.decode!(res.body)
+        res_map = JSON.decode!(res.body)
 
         cost_map = vehicle_cost_logo_map()
 
@@ -146,12 +147,9 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
         # Write guard data to a file. If there are new IDs, they should be committed to the repo.
         # This is necessary for GitHub CI.
         content =
-          xp_list
-          |> Stream.map(fn %{"description" => desc, "experience_id" => id} -> "#{id}|||#{desc}" end)
-          |> Enum.sort()
-          |> Enum.join("|||")
+          Enum.map_join(xp_list, "\n", fn %{"description" => desc, "experience_id" => id} -> "#{id} #{desc}" end)
 
-        File.write!(CAI.Guards.xp_guard_data_path(), content)
+        File.write!(Path.join([__DIR__, "../../xp_id_desc_map.txt"]), content)
 
         {:ok, new_xp_map}
 
@@ -162,13 +160,13 @@ defmodule CAI.Cachex.StaticDataWarmer.Getters do
 
   @facility_url "https://raw.githubusercontent.com/cooltrain7/Planetside-2-API-Tracker/master/Census/map_region.json"
   def get_facilities do
-    case HTTPoison.get(@facility_url) do
+    case Req.get(@facility_url) do
       {:ok, res} ->
-        res_map = Jason.decode!(res.body)
+        res_map = JSON.decode!(res.body)
 
         facility_map =
           for facility <- res_map["map_region_list"], into: %{} do
-            {{:facility, maybe_to_int(facility["facility_id"])},
+            {{:facility, maybe_to_int(Map.get(facility, "facility_id", 0))},
              Map.new(facility, fn {field_name, value} ->
                {field_name, maybe_to_int(value)}
              end)}

@@ -9,13 +9,13 @@ defmodule CAIWeb.EventFeed.Components do
     endpoint: CAIWeb.Endpoint,
     router: CAIWeb.Router
 
-  import CAI.Guards, only: [is_revive_xp: 1, is_assist_xp: 1, is_gunner_assist_xp: 1]
+  import CAI.XP, only: [is_revive_xp: 1, is_assist_xp: 1, is_gunner_assist_xp: 1]
   import CAIWeb.CoreComponents, only: [hover_timestamp: 1]
   import CAIWeb.SessionComponents
 
   alias CAI.Characters.Outfit
 
-  alias CAI.ESS.{
+  alias CAI.Event.{
     BattleRankUp,
     Death,
     FacilityControl,

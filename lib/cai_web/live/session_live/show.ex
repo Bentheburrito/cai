@@ -5,22 +5,24 @@ defmodule CAIWeb.SessionLive.Show do
   import CAIWeb.SessionComponents
   import CAIWeb.Utils
   import CAIWeb.SessionLive.Helpers
-  import Phoenix.Component, only: []
+  import Phoenix.Component, only: [assign: 2]
 
-  alias CAI.ESS.{Helpers, PlayerLogout}
+  alias CAI.Event.PlayerLogout
 
+  alias CAI.Character.GameSession
+  alias CAI.Character.GameSessionList
   alias CAI.Characters
-  alias CAI.Characters.{Character, PendingCharacter, Session}
+  alias CAI.Characters.Character
   alias CAIWeb.SessionLive.Blurbs
   alias CAIWeb.SessionLive.Show.Model
-  alias Phoenix.PubSub
+  alias CAI.PubSub
 
   require Logger
 
   @prepend 0
   @append -1
   @events_limit 15
-  @time_update_interval 1500
+  @time_update_interval :timer.seconds(1) + 100
 
   ### MOUNT AND HANDLE_PARAMS ###
 
@@ -40,23 +42,23 @@ defmodule CAIWeb.SessionLive.Show do
     with {:ok, login} <- parse_int_param(login, socket),
          {:ok, logout} <- parse_int_param(logout, socket),
          {:ok, %Character{} = character} <- get_character(character_id, socket),
-         {:ok, session, event_history} <- get_session_history(character.character_id, login, logout, socket) do
-      {init_events, remaining_events, new_limit} = split_events_while(event_history, @events_limit)
+         {:ok, %GameSession{} = session} <- get_session_history(character.character_id, login, socket) do
+      {init_entries, remaining_entries} = Enum.split(session.timeline, @events_limit)
 
-      bulk_append(init_events, character, new_limit)
+      bulk_append(init_entries, character, length(init_entries))
 
       {
         :noreply,
         socket
         |> stream(:events, [], reset: true, at: @append, limit: @events_limit)
+        |> assign(page_title: "#{character.name_first}'s Previous Session")
         |> Model.put(
-          aggregates: Session.take_aggregates(session),
+          session: session,
           character: character,
           duration_mins: Float.round((logout - login) / 60, 2),
           live?: false,
           loading_more?: true,
-          page_title: "#{character.name_first}'s Previous Session",
-          remaining_events: remaining_events,
+          remaining_events: remaining_entries,
           login: login,
           logout: logout
         )
@@ -69,56 +71,58 @@ defmodule CAIWeb.SessionLive.Show do
   @impl true
   def handle_params(%{"character_id" => character_id}, _, socket) do
     with {:ok, %Character{} = character} <- get_character(character_id, socket),
-         {:ok, _c, timestamps} <- Characters.get_session_boundaries(character.character_id, 1) do
+         # {:ok, _c, timestamps} <- Characters.get_session_boundaries(character.character_id, 1) do
+         {:ok, %GameSession{} = session} <- get_current_session(character, socket) do
       if connected?(socket) do
         # Unsubscribe from the previously tracked character (if there is one)
         if socket.assigns.model.character do
-          PubSub.unsubscribe(CAI.PubSub, "ess:#{socket.assigns.model.character.character_id}")
+          PubSub.unsubscribe(PubSub.character_event(socket.assigns.model.character.character_id))
         end
 
-        PubSub.subscribe(CAI.PubSub, "ess:#{character.character_id}")
-        PubSub.subscribe(CAI.PubSub, "ess:FacilityControl")
+        PubSub.subscribe(PubSub.character_event(character.character_id))
+
+        if is_integer(session.world_id), do: PubSub.subscribe(PubSub.world_event(session.world_id))
       end
 
-      # If the character is currently online, let's build the session so far
-      online? = Helpers.online?(character.character_id, timestamps)
-
-      aggregates =
-        with true <- online?,
-             [{login, logout} | _] <- timestamps,
-             {:ok, session, event_history} <- get_session_history(character.character_id, login, logout, socket) do
-          {init_events, _remaining_events, new_limit} = split_events_while(event_history, @events_limit)
-
-          bulk_append(init_events, character, new_limit)
-
-          Session.take_aggregates(session)
-        else
-          _ -> Session.take_aggregates()
-        end
-
-      {login, logout} =
-        case {online?, timestamps} do
-          {true, [{login, logout}]} -> {login, logout}
-          _ -> {:os.system_time(:second), :offline}
-        end
-
       Process.send_after(self(), :time_update, @time_update_interval)
+
+      {init_entries, remaining_entries} = Enum.split(session.timeline, @events_limit)
+
+      bulk_append(init_entries, character, length(init_entries))
 
       {
         :noreply,
         socket
         |> stream(:events, [], at: @prepend, limit: @events_limit)
         |> Model.put(
-          aggregates: aggregates,
+          remaining_events: remaining_entries,
+          # aggregates: aggregates,
+          session: session,
           character: character,
           live?: true,
           page_title: "#{character.name_first}'s Session",
           pending_groups: %{},
-          login: login,
-          logout: logout
+          login: session.began_at,
+          logout: System.os_time(:second)
         )
         |> refresh_aggregate_characters()
       }
+    end
+  end
+
+  defp get_current_session(character, socket) do
+    %GameSessionList{} = session_list = CAI.game_sessions(character.character_id)
+    online? = Characters.online?(character.character_id)
+
+    case session_list.sessions do
+      [%GameSession{status: :in_progress} = session | _] when online? ->
+        {:ok, session}
+
+      _else ->
+        {:noreply,
+         socket
+         |> put_flash(:info, "#{character.name_first} is not online.")
+         |> push_navigate(to: ~p"/sessions/#{character.character_id}")}
     end
   end
 
@@ -224,20 +228,20 @@ defmodule CAIWeb.SessionLive.Show do
 
   # Live Session - receive a new event via PubSub
   @impl true
-  def handle_info({:event, %Ecto.Changeset{} = event_cs}, socket) do
-    event = Ecto.Changeset.apply_changes(event_cs)
-    %Model{aggregates: aggregates, character: %{character_id: character_id}, logout: logout} = socket.assigns.model
+  def handle_info({msg_type, event}, socket) when msg_type in [:event_handled, :apply_event] do
+    %Model{session: session, logout: logout} = socket.assigns.model
 
-    aggregates = Session.put_aggregate_event(event, aggregates, character_id)
+    %GameSession{timeline: [entry | _]} = session = GameSession.handle_event(session, event.struct)
 
+    # TODO: remove - we can just redirect to the closed session page when they go offline
     logout = if match?(%PlayerLogout{}, event), do: :offline, else: logout
 
-    socket = Model.put(socket, aggregates: aggregates, logout: logout)
-    socket = Blurbs.maybe_push_blurb(event, socket)
+    socket = Model.put(socket, session: session, logout: logout)
+    socket = Blurbs.maybe_push_blurb(event.struct, socket)
 
     socket
     |> refresh_aggregate_characters()
-    |> handle_ess_event(event)
+    |> handle_ess_event(entry)
   end
 
   # Live Session - we've waited long enough to receive a primary event and any bonuses, so combine them into an Entry.
@@ -256,14 +260,11 @@ defmodule CAIWeb.SessionLive.Show do
   # Live Session - Update the `logout` time every few seconds, unless the character is no longer online.
   @impl true
   def handle_info(:time_update, socket) do
-    last_entry = socket.assigns.model.last_entry
-    last_event = if is_nil(last_entry), do: nil, else: last_entry.event
-
-    if Helpers.online?(last_event) do
+    if Characters.online?(socket.assigns.model.character.character_id) do
       login = socket.assigns.model.login
-      logout = :os.system_time(:second)
+      logout = System.os_time(:second)
 
-      duration_mins = if logout != :offline, do: Float.round((logout - login) / 60, 2), else: 0
+      duration_mins = Float.round((logout - login) / 60, 2)
 
       Process.send_after(self(), :time_update, @time_update_interval)
       {:noreply, Model.put(socket, login: login, logout: logout, duration_mins: duration_mins)}
@@ -280,7 +281,7 @@ defmodule CAIWeb.SessionLive.Show do
     update_char_fn =
       case result do
         {:ok, character} -> fn _c -> character end
-        _ -> fn old_pc -> %PendingCharacter{old_pc | state: :unavailable} end
+        _ -> fn old_pc -> put_in(old_pc.state, :unavailable) end
       end
 
     {:noreply,

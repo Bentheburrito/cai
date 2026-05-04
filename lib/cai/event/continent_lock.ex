@@ -1,14 +1,11 @@
-defmodule CAI.ESS.ContinentUnlock do
+defmodule CAI.Event.ContinentLock do
   @moduledoc """
-  Ecto schema for ContinentUnlock events.
+  Ecto schema for ContinentLock events.
   """
   use Ecto.Schema
 
-  import Ecto.Changeset
-
   @primary_key false
-
-  schema "continent_unlocks" do
+  embedded_schema do
     field :metagame_event_id, :integer
     field :nc_population, :integer
     field :previous_faction, :integer
@@ -20,13 +17,10 @@ defmodule CAI.ESS.ContinentUnlock do
     field :zone_id, :integer
   end
 
-  def changeset(event, params \\ %{}) do
-    field_list =
-      :fields
-      |> __MODULE__.__schema__()
-      |> List.delete(:id)
-
-    event
-    |> cast(params, field_list)
+  defimpl JSON.Encoder do
+    def encode(event, opts) do
+      {:ok, dumped_event} = CAI.Event.Type.dump(event)
+      JSON.encode!(dumped_event, opts)
+    end
   end
 end

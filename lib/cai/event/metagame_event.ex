@@ -1,14 +1,11 @@
-defmodule CAI.ESS.MetagameEvent do
+defmodule CAI.Event.MetagameEvent do
   @moduledoc """
   Ecto schema for MetagameEvent events.
   """
   use Ecto.Schema
 
-  import Ecto.Changeset
-
   @primary_key false
-
-  schema "metagame_events" do
+  embedded_schema do
     field :experience_bonus, :float
     field :faction_nc, :float
     field :faction_tr, :float
@@ -22,13 +19,10 @@ defmodule CAI.ESS.MetagameEvent do
     field :zone_id, :integer
   end
 
-  def changeset(event, params \\ %{}) do
-    field_list =
-      :fields
-      |> __MODULE__.__schema__()
-      |> List.delete(:id)
-
-    event
-    |> cast(params, field_list)
+  defimpl JSON.Encoder do
+    def encode(event, opts) do
+      {:ok, dumped_event} = CAI.Event.Type.dump(event)
+      JSON.encode!(dumped_event, opts)
+    end
   end
 end

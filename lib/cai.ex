@@ -8,7 +8,13 @@ defmodule CAI do
   """
   require CAI.Macros
 
-  import CAI.Guards, only: [is_dogfighter_xp: 1, is_vehicle_destruction_xp: 1]
+  import CAI.XP, only: [is_dogfighter_xp: 1, is_vehicle_destruction_xp: 1]
+  import Ecto.Query
+
+  alias CAI.Character.GameSession
+  alias CAI.Character.GameSessionList
+  alias CAI.Event
+  alias CAI.EventHandler
 
   def sid, do: System.get_env("SERVICE_ID")
 
@@ -16,6 +22,42 @@ defmodule CAI do
   CAI.Macros.static_getter(:vehicle)
   CAI.Macros.static_getter(:weapon)
   CAI.Macros.static_getter(:xp)
+
+  def emit_event(%Ecto.Changeset{data: %CAI.Event{}, valid?: true} = event_cs) do
+    %Event{} = event = CAI.Repo.insert!(event_cs)
+    # :ok = Event.Cache.put(event)
+
+    # PubSub.broadcast(CAI.PubSub, "event:new", {:new_event, event})
+
+    EventHandler.queue_event(event)
+  end
+
+  def game_sessions(character_id) do
+    case get_game_session_list(character_id) do
+      nil -> GameSessionList.init(character_id)
+      %GameSessionList{} = session_list -> session_list
+    end
+  end
+
+  defp get_game_session_list(character_id) do
+    CAI.Projection
+    |> where([p], p.projector == ^to_string(GameSessionList) and p.key == ^to_string(character_id))
+    |> select([p], p.state)
+    |> CAI.Repo.one()
+  end
+
+  def game_session(character_id, login) do
+    character_id
+    |> game_sessions()
+    |> Map.fetch!(:sessions)
+    |> Enum.find_value({:error, :not_found}, fn %GameSession{} = session ->
+      if session.began_at == login do
+        {:ok, session}
+      else
+        nil
+      end
+    end)
+  end
 
   @doc """
   Get the image icon for the given experience_id and team/faction ID
@@ -64,8 +106,8 @@ defmodule CAI do
 
   def xp_icon(_, _), do: :noop
 
-  def factions,
-    do: %{
+  def factions do
+    %{
       0 => %{
         name: "No Faction",
         alias: "NS",
@@ -97,6 +139,7 @@ defmodule CAI do
         image: "/images/NSO.png"
       }
     }
+  end
 
   def loadouts do
     %{
@@ -128,7 +171,7 @@ defmodule CAI do
   end
 
   def ess_subscriptions do
-    [
+    PS2.ESS.Subscription.new(
       events: [
         PS2.gain_experience(),
         PS2.death(),
@@ -143,9 +186,9 @@ defmodule CAI do
         PS2.continent_lock(),
         PS2.facility_control()
       ],
-      worlds: ["all"],
-      characters: ["all"]
-    ]
+      worlds: :all,
+      characters: :all
+    )
   end
 
   def please_report_msg do
