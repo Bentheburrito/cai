@@ -73,8 +73,8 @@
           <span id="blurb-player" phx-hook="BlurbPlayer">🔊 Turn off Blurbs</span>
           <%!-- Need to remove the . in extension names since it messes with querySelector --%>
           <audio
-            :for={filename <- Blurbs.voicepack_filenames(blurbs.voicepack)}
-            src={~p"/audio/voicepacks/#{blurbs.voicepack}/tracks/#{filename}"}
+            :for={{voicepack_name, filename} <- Blurbs.voicepack_filenames(blurbs.voicepack)}
+            src={~p"/audio/voicepacks/#{voicepack_name}/tracks/#{filename}"}
             id={"blurb-source-#{String.replace(filename, ".", "")}"}
             class="blurb-source-audio"
             phx-hook="BlurbSource"

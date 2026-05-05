@@ -31,7 +31,7 @@ defmodule CAIWeb.SessionLive.Show do
     {
       :ok,
       socket
-      |> Model.assign_new(0, 0)
+      |> Model.new(0, 0)
       |> stream_configure(:events, dom_id: &CAIWeb.SessionLive.Helpers.event_to_dom_id/1)
     }
   end

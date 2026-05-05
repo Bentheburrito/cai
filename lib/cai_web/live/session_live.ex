@@ -16,7 +16,6 @@ defmodule CAIWeb.SessionLive do
     <form phx-change="validate" phx-submit="search">
       <.input
         placeholder="Type a character name or ID here"
-        class="text-zinc-900"
         id="character-ref"
         name="character-ref"
         value={@ref}

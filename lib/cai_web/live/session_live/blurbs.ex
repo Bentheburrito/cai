@@ -38,12 +38,16 @@ defmodule CAIWeb.SessionLive.Blurbs do
                Map.update(blurbs, vp, %{category => filenames}, &Map.put(&1, category, filenames))
            end)
 
-  def voicepacks, do: @voicepacks
+  def voicepacks, do: ["all" | @voicepacks]
+
+  def voicepack_filenames("all") do
+    Enum.reduce(@voicepacks, MapSet.new(), &MapSet.union(&2, voicepack_filenames(&1)))
+  end
 
   def voicepack_filenames(voicepack) when voicepack in @voicepacks do
     category_map = Map.fetch!(@blurbs, voicepack)
 
-    for {_category, filenames} <- category_map, filename <- filenames, into: MapSet.new(), do: filename
+    for {_category, filenames} <- category_map, filename <- filenames, into: MapSet.new(), do: {voicepack, filename}
   end
 
   def track_paths(voicepack) do
@@ -96,6 +100,9 @@ defmodule CAIWeb.SessionLive.Blurbs do
         socket
     end
   end
+
+  def get_random_blurb_filename(category, %Blurbs{voicepack: "all"} = state),
+    do: get_random_blurb_filename(category, put_in(state.voicepack, Enum.random(@voicepacks)))
 
   def get_random_blurb_filename(category, %Blurbs{} = state) do
     case @blurbs[state.voicepack][category] do
