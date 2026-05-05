@@ -57,7 +57,7 @@ defmodule CAI.MixProject do
       # {:live_model, path: "../../Phoenix/live_model"},
       {:cachex, "~> 3.6"},
       {:req, "~> 0.5.10"},
-      {:dotenv_parser, "~> 1.2", only: [:dev]},
+      {:dotenv_parser, "~> 1.2", only: [:dev, :test]},
       {:credo, "~> 1.6", only: [:dev, :test, :github], runtime: false},
       {:dialyxir, "~> 1.4", only: [:dev, :test], runtime: false},
       {:sobelow, "~> 0.13", only: [:dev, :test], runtime: false}
