@@ -5,7 +5,7 @@ defmodule CAI.MixProject do
     [
       app: :cai,
       version: "0.1.18",
-      elixir: "~> 1.14",
+      elixir: "~> 1.18",
       elixirc_paths: elixirc_paths(Mix.env()),
       listeners: [Phoenix.CodeReloader],
       start_permanent: Mix.env() == :prod,
